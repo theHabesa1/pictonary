@@ -32,7 +32,7 @@
     display: grid;
     place-content: center;
     text-align: center;
-    color: #fff;
+    color: var(--ink);
     font-family: var(--font-display);
     font-size: 1.2rem;
   }

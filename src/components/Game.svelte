@@ -298,9 +298,8 @@
     flex-wrap: wrap;
   }
   .drawing-who {
-    color: #fff;
+    color: var(--ink);
     font-weight: 700;
-    text-shadow: 0 2px 0 rgba(29, 20, 66, 0.4);
   }
   .mobile-tabs {
     display: none;
@@ -346,7 +345,7 @@
     .mobile-tabs button {
       flex: 1;
       border: 2px solid var(--ink);
-      background: rgba(255, 255, 255, 0.6);
+      background: #fff;
       border-radius: 12px;
       padding: 8px;
       font-weight: 800;

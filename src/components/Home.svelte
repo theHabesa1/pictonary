@@ -142,11 +142,10 @@
   .tagline {
     margin: -4px 0 4px;
     text-align: center;
-    color: #fff;
+    color: var(--ink-soft);
     font-weight: 700;
     font-size: 1.05rem;
     line-height: 1.45;
-    text-shadow: 0 2px 0 rgba(29, 20, 66, 0.35);
   }
   .panel {
     width: 100%;

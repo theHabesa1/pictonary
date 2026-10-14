@@ -343,7 +343,6 @@
     padding: 14px 16px calc(14px + env(safe-area-inset-bottom));
     display: flex;
     justify-content: center;
-    background: linear-gradient(to top, rgba(29, 20, 66, 0.55), transparent);
     pointer-events: none;
     z-index: 10;
   }
