@@ -32,27 +32,62 @@
   });
 
   let menuOpen = $state(false);
-  let mobileTab = $state('chat');
+  const closeMenu = () => (menuOpen = false);
 
-  // Fit the 4:3 board inside whatever space is left (desktop), or full width (phones).
-  let innerWidth = $state(1200);
+  // ── Layout ──
+  // Phones (and portrait tablets) get one column: bar, players strip, board, then the chat
+  // filling the rest of the screen with its input always visible. The app is pinned to the
+  // visual viewport so the on-screen keyboard shrinks the layout instead of covering it.
+  let vw = $state(innerWidth);
+  let vh = $state(innerHeight);
+  let vvTop = $state(0);
+  let portrait = $state(innerHeight > innerWidth);
+  const phone = $derived(vw <= 760 || (vw <= 1024 && portrait));
+
+  $effect(() => {
+    const vv = window.visualViewport;
+    const update = () => {
+      vw = innerWidth;
+      vh = vv?.height ?? innerHeight;
+      vvTop = vv?.offsetTop ?? 0;
+      // Ignore the height change caused by the keyboard when deciding orientation.
+      if (!document.activeElement?.matches?.('input, textarea')) portrait = innerHeight > innerWidth;
+    };
+    update();
+    vv?.addEventListener('resize', update);
+    vv?.addEventListener('scroll', update);
+    addEventListener('resize', update);
+    return () => {
+      vv?.removeEventListener('resize', update);
+      vv?.removeEventListener('scroll', update);
+      removeEventListener('resize', update);
+    };
+  });
+
   let areaW = $state(0);
   let areaH = $state(0);
-  const mobile = $derived(innerWidth <= 860);
-  const boardW = $derived(Math.floor(mobile ? areaW : Math.min(areaW, (areaH * 4) / 3)));
+  let barH = $state(0);
+  let playersH = $state(0);
+  let underH = $state(0);
+  const CHAT_MIN = 150; // keep at least a few messages + the input visible on phones
+  const boardW = $derived.by(() => {
+    if (!phone) return Math.floor(Math.min(areaW, (areaH * 4) / 3));
+    const maxH = vh - 12 - 18 - barH - playersH - underH - CHAT_MIN;
+    return Math.floor(Math.max(160, Math.min(areaW, (maxH * 4) / 3)));
+  });
+
+  const inviteLink = $derived(`${location.origin}${location.pathname}?r=${s.code}`);
 </script>
 
-<svelte:window bind:innerWidth />
-
-<div class="game" class:drawer={canDraw}>
-  <header class="bar card">
+<div class="game" class:phone class:drawer={canDraw} style:--vv-h="{vh}px" style:--vv-top="{vvTop}px">
+  <header class="bar card" bind:clientHeight={barH}>
     <div class="bar-left">
-      <div class="round">
+      <div class="round" title="Round">
         <small>Round</small>
         <b>{Math.min(s.round, s.settings.rounds)}<span>/{s.settings.rounds}</span></b>
       </div>
       {#if s.settings.mode === 'teams' && turn && drawer}
-        <div class="team-turn" style:--team={TEAMS[turn.team].color}>
+        <div class="team-turn" style:--team={TEAMS[turn.team].color} title="{TEAMS[turn.team].name}' turn">
           {TEAMS[turn.team].emoji}<span>{TEAMS[turn.team].name}</span>
         </div>
       {/if}
@@ -64,30 +99,29 @@
 
     <div class="bar-right">
       {#if turn && (s.phase === 'drawing' || s.phase === 'choosing')}
-        <Timer seconds={secondsLeft} total={turn.duration} />
+        <Timer seconds={secondsLeft} total={turn.duration} small={phone} />
       {/if}
-      <button class="btn white icon" onclick={toggleMute} title={game.muted ? 'Unmute' : 'Mute'} aria-label={game.muted ? 'Unmute sounds' : 'Mute sounds'}>
-        {game.muted ? '🔇' : '🔊'}
-      </button>
+      {#if !phone}
+        <button class="btn white icon" onclick={toggleMute} title={game.muted ? 'Unmute' : 'Mute'} aria-label={game.muted ? 'Unmute sounds' : 'Mute sounds'}>
+          {game.muted ? '🔇' : '🔊'}
+        </button>
+      {/if}
       <div class="menu-wrap">
         <button class="btn white icon" onclick={() => (menuOpen = !menuOpen)} aria-label="Menu" aria-expanded={menuOpen}>☰</button>
         {#if menuOpen}
-          <button class="scrim" aria-label="Close menu" onclick={() => (menuOpen = false)}></button>
+          <button class="scrim" aria-label="Close menu" onclick={closeMenu}></button>
           <div class="menu card" role="menu">
             <div class="room-code">Room <b>{s.code}</b></div>
+            {#if phone}
+              <button role="menuitem" onclick={() => { toggleMute(); closeMenu(); }}>{game.muted ? '🔊 Turn sounds on' : '🔇 Mute sounds'}</button>
+            {/if}
             {#if (isHost || isDrawer) && (s.phase === 'drawing' || s.phase === 'choosing')}
-              <button role="menuitem" onclick={() => { send('turn:skip'); menuOpen = false; }}>⏭️ Skip this turn</button>
+              <button role="menuitem" onclick={() => { send('turn:skip'); closeMenu(); }}>⏭️ Skip this turn</button>
             {/if}
             {#if isHost && s.phase !== 'gameOver'}
-              <button role="menuitem" onclick={() => { if (confirm('End the game for everyone and go back to the lobby?')) send('game:lobby'); menuOpen = false; }}>⏹️ End game</button>
+              <button role="menuitem" onclick={() => { if (confirm('End the game for everyone and go back to the lobby?')) send('game:lobby'); closeMenu(); }}>⏹️ End game</button>
             {/if}
-            <button
-              role="menuitem"
-              onclick={() => {
-                navigator.clipboard?.writeText(`${location.origin}/?r=${s.code}`);
-                menuOpen = false;
-              }}>🔗 Copy invite link</button
-            >
+            <button role="menuitem" onclick={() => { navigator.clipboard?.writeText(inviteLink); closeMenu(); }}>🔗 Copy invite link</button>
             <button role="menuitem" class="danger" onclick={() => confirm('Leave this game?') && leaveRoom()}>🚪 Leave room</button>
           </div>
         {/if}
@@ -95,8 +129,8 @@
     </div>
   </header>
 
-  <aside class="players card scroll-thin" class:hide-mobile={mobileTab !== 'players'}>
-    <Players state={s} />
+  <aside class="players scroll-thin" class:card={!phone} bind:clientHeight={playersH}>
+    <Players state={s} strip={phone} />
   </aside>
 
   <main class="stage">
@@ -111,24 +145,21 @@
         {/if}
       </div>
     </div>
-    {#if canDraw}
-      <Toolbar />
-    {:else if s.phase === 'drawing'}
-      <div class="react-bar">
-        <span class="drawing-who">{drawer?.avatar} <b>{drawer?.name}</b> is drawing</span>
-        <Reactions buttons />
-      </div>
-    {/if}
+    <div class="under" bind:clientHeight={underH}>
+      {#if canDraw}
+        <Toolbar />
+      {:else if s.phase === 'drawing' && !phone}
+        <div class="react-bar">
+          <span class="drawing-who">{drawer?.avatar} <b>{drawer?.name}</b> is drawing</span>
+          <Reactions buttons />
+        </div>
+      {/if}
+    </div>
   </main>
 
-  <aside class="chat card" class:hide-mobile={mobileTab !== 'chat'}>
-    <Chat />
+  <aside class="chat card">
+    <Chat compact={phone} reactions={phone && s.phase === 'drawing' && !isDrawer} />
   </aside>
-
-  <nav class="mobile-tabs">
-    <button class:on={mobileTab === 'chat'} onclick={() => (mobileTab = 'chat')}>💬 Chat &amp; guesses</button>
-    <button class:on={mobileTab === 'players'} onclick={() => (mobileTab = 'players')}>🏆 Scores</button>
-  </nav>
 
   {#if s.phase === 'gameOver'}
     <GameOver state={s} {isHost} />
@@ -152,7 +183,7 @@
   .bar {
     grid-area: bar;
     display: grid;
-    grid-template-columns: 1fr auto 1fr;
+    grid-template-columns: minmax(max-content, 1fr) minmax(0, 2fr) minmax(max-content, 1fr);
     align-items: center;
     gap: 12px;
     padding: 8px 12px;
@@ -234,7 +265,7 @@
     text-align: left;
     border: none;
     background: none;
-    padding: 10px 12px;
+    padding: 12px;
     border-radius: 10px;
     font-weight: 800;
   }
@@ -288,6 +319,13 @@
     flex: none;
     border-radius: 16px;
     background: #fff;
+    container-type: size;
+  }
+  .under {
+    width: 100%;
+  }
+  .under:empty {
+    display: none;
   }
   .react-bar {
     display: flex;
@@ -301,9 +339,6 @@
     color: var(--ink);
     font-weight: 700;
   }
-  .mobile-tabs {
-    display: none;
-  }
 
   @media (max-width: 1100px) {
     .game {
@@ -311,70 +346,78 @@
     }
   }
 
-  @media (max-width: 860px) {
-    .game {
-      height: auto;
-      min-height: 100dvh;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      padding: 8px;
-    }
-    .bar {
-      grid-template-columns: auto 1fr auto;
-      padding: 6px 8px;
-      gap: 8px;
-      position: sticky;
-      top: 8px;
-      z-index: 20;
-    }
-    .team-turn span {
-      display: none;
-    }
-    .round {
-      padding: 4px 8px;
-    }
-    .board-area {
-      flex: none;
-    }
-    .mobile-tabs {
-      display: flex;
-      gap: 6px;
-      order: 3;
-    }
-    .mobile-tabs button {
-      flex: 1;
-      border: 2px solid var(--ink);
-      background: #fff;
-      border-radius: 12px;
-      padding: 8px;
-      font-weight: 800;
-    }
-    .mobile-tabs button.on {
-      background: var(--yellow);
-    }
-    .stage {
-      order: 2;
-    }
-    .chat,
-    .players {
-      order: 4;
-    }
-    .chat {
-      height: max(300px, calc(100dvh - 75vw - 150px));
-    }
-    .players {
-      max-height: none;
-    }
-    .hide-mobile {
-      display: none;
-    }
+  /* ───────── Phone layout ───────── */
+  .game.phone {
+    position: fixed;
+    left: 0;
+    right: 0;
+    top: var(--vv-top);
+    height: var(--vv-h);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 6px;
+    max-width: none;
+    margin: 0;
   }
-  @media (max-width: 420px) {
-    .bar-right :global(.btn.icon) {
-      width: 36px;
-      height: 36px;
-      font-size: 1rem;
-    }
+  .phone .bar {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 6px;
+    padding: 5px 6px;
+    border-radius: 14px;
+    box-shadow: var(--shadow-sm);
+    flex: none;
+  }
+  .phone .bar-left,
+  .phone .bar-right {
+    gap: 5px;
+  }
+  .phone .round {
+    padding: 5px 7px;
+    border-radius: 9px;
+  }
+  .phone .round small {
+    display: none;
+  }
+  .phone .round b {
+    font-size: 1.05rem;
+  }
+  .phone .round b span {
+    font-size: 0.75rem;
+  }
+  .phone .team-turn {
+    padding: 3px 7px;
+    font-size: 1rem;
+  }
+  .phone .team-turn span {
+    display: none;
+  }
+  .phone .bar-right :global(.btn.icon) {
+    width: 36px;
+    height: 36px;
+    font-size: 1rem;
+    border-radius: 10px;
+  }
+  .phone .players {
+    flex: none;
+    padding: 0;
+    overflow: visible;
+  }
+  .phone .stage {
+    flex: none;
+    gap: 6px;
+  }
+  .phone .board-area {
+    flex: none;
+  }
+  .phone .board {
+    border-radius: 12px;
+    box-shadow: var(--shadow-sm);
+  }
+  .phone .chat {
+    flex: 1;
+    min-height: 0;
+    border-radius: 14px;
+    box-shadow: var(--shadow-sm);
   }
 </style>

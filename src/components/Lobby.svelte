@@ -13,7 +13,18 @@
     TEAMS.slice(0, s.settings.teamCount).map((t) => ({ ...t, members: s.players.filter((p) => p.team === t.id) })),
   );
   const host = $derived(s.players.find((p) => p.id === s.hostId));
-  const link = $derived(`${location.origin}/?r=${s.code}`);
+  const link = $derived(`${location.origin}${location.pathname}?r=${s.code}`);
+
+  // On phones the settings collapse into a one-line summary.
+  let settingsOpen = $state(false);
+  const DIFF = { easy: '🟢 Easy', medium: '🟡 Medium', hard: '🔴 Hard', mixed: '🎲 Mixed' };
+  const summary = $derived([
+    s.settings.mode === 'teams' ? `👨‍👩‍👧‍👦 ${s.settings.teamCount} teams` : '🙋 Every player',
+    `🔁 ${s.settings.rounds} round${s.settings.rounds > 1 ? 's' : ''}`,
+    `⏱️ ${s.settings.drawTime}s`,
+    s.settings.hints ? `💡 ${s.settings.hints} hint${s.settings.hints > 1 ? 's' : ''}` : '💡 No hints',
+    DIFF[s.settings.difficulty],
+  ]);
 
   let copied = $state(false);
   async function copyLink() {
@@ -109,12 +120,22 @@
       {/if}
     </section>
 
-    <section class="card settings">
-      <div class="section-head">
+    <section class="card settings" class:open={settingsOpen}>
+      <button class="settings-toggle" onclick={() => (settingsOpen = !settingsOpen)} aria-expanded={settingsOpen}>
+        <h2>⚙️ Game settings</h2>
+        <span class="toggle-cta">{settingsOpen ? 'Hide' : isHost ? 'Change' : 'View'} <span class="chev">▾</span></span>
+      </button>
+      <div class="section-head desktop-head">
         <h2>Game settings</h2>
         {#if !isHost}<small class="ro">Only {host?.name ?? 'the host'} can change these</small>{/if}
       </div>
-      <Settings settings={s.settings} editable={isHost} />
+      <div class="summary">
+        {#each summary as item}<span>{item}</span>{/each}
+      </div>
+      <div class="settings-body">
+        {#if !isHost}<p class="ro ro-mobile">Only {host?.name ?? 'the host'} can change these</p>{/if}
+        <Settings settings={s.settings} editable={isHost} />
+      </div>
     </section>
 
     <section class="card lobby-chat">
@@ -360,6 +381,11 @@
     font-weight: 700;
     box-shadow: var(--shadow-sm);
   }
+  .settings-toggle,
+  .summary,
+  .ro-mobile {
+    display: none;
+  }
   @media (max-width: 860px) {
     .grid {
       grid-template-columns: 1fr;
@@ -371,8 +397,146 @@
       font-size: 2rem;
     }
   }
-  @media (max-width: 480px) {
+
+  /* ───── phones ───── */
+  @media (max-width: 640px) {
+    .lobby {
+      padding: 10px 10px 96px;
+      gap: 10px;
+    }
+    .invite {
+      padding: 12px 14px;
+      gap: 10px;
+      flex-wrap: nowrap;
+    }
+    .invite .label {
+      font-size: 0.7rem;
+      margin-bottom: 2px;
+    }
+    .code {
+      font-size: 1.7rem;
+      letter-spacing: 0.12em;
+    }
+    .hint {
+      display: none;
+    }
+    .invite .btn {
+      padding: 10px 14px;
+      font-size: 1rem;
+    }
+    .grid {
+      gap: 10px;
+    }
+    .players,
+    .settings {
+      padding: 12px;
+    }
+    h2 {
+      font-size: 1.15rem;
+    }
+    .section-head {
+      margin-bottom: 10px;
+    }
+    .solo-list {
+      grid-template-columns: 1fr 1fr;
+    }
+    .chip {
+      padding: 5px 8px;
+      gap: 6px;
+      font-size: 0.92rem;
+    }
+    .chip .av {
+      font-size: 1.3rem;
+    }
     .teams {
+      gap: 8px;
+    }
+    .team {
+      padding: 8px;
+    }
+    .team-head {
+      font-size: 0.95rem;
+    }
+    .lobby-chat {
+      height: 220px;
+    }
+    /* Settings collapse to a summary on phones. */
+    .desktop-head {
+      display: none;
+    }
+    .settings-toggle {
+      display: flex;
+      width: 100%;
+      align-items: center;
+      justify-content: space-between;
+      border: none;
+      background: none;
+      padding: 0;
+      text-align: left;
+    }
+    .toggle-cta {
+      font-weight: 800;
+      color: var(--violet);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .chev {
+      transition: transform 0.2s;
+    }
+    .open .chev {
+      transform: rotate(180deg);
+    }
+    .summary {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      margin-top: 10px;
+    }
+    .summary span {
+      background: var(--cream);
+      border: 2px solid var(--line);
+      border-radius: 999px;
+      padding: 3px 9px;
+      font-weight: 800;
+      font-size: 0.8rem;
+    }
+    .open .summary {
+      display: none;
+    }
+    .settings-body {
+      display: none;
+      margin-top: 12px;
+    }
+    .open .settings-body {
+      display: block;
+    }
+    .ro-mobile {
+      display: block;
+      margin: 0 0 10px;
+      font-size: 0.85rem;
+    }
+    .start-bar {
+      padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+      background: var(--bg);
+      border-top: 2px solid var(--line);
+    }
+    .start-bar .btn {
+      width: 100%;
+      min-width: 0;
+    }
+    .wait-host {
+      width: 100%;
+      text-align: center;
+      padding: 10px 14px;
+      font-size: 0.92rem;
+    }
+  }
+  @media (max-width: 359px) {
+    .teams {
+      grid-template-columns: 1fr;
+    }
+    .solo-list {
       grid-template-columns: 1fr;
     }
   }

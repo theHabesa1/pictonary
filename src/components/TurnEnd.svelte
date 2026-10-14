@@ -112,10 +112,33 @@
       opacity: 0;
     }
   }
-  @media (max-width: 600px) {
+  /* Small boards (phones): the board is a size container. */
+  @container (max-height: 360px) {
+    .overlay {
+      gap: 4px;
+      padding: 10px;
+    }
+    h3 {
+      font-size: 1rem;
+    }
+    .was {
+      font-size: 0.7rem;
+      margin: 0;
+    }
+    .word {
+      font-size: 1.9rem;
+      -webkit-text-stroke-width: 1.5px;
+      text-shadow: 0 3px 0 var(--ink);
+    }
+    .gains {
+      margin-top: 4px;
+      gap: 3px;
+      max-height: 40%;
+    }
     .gains li {
-      padding: 3px 10px;
-      font-size: 0.9rem;
+      padding: 2px 10px;
+      font-size: 0.85rem;
+      border-radius: 9px;
     }
   }
 </style>

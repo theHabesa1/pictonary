@@ -1,12 +1,12 @@
 <script>
-  let { seconds, total } = $props();
+  let { seconds, total, small = false } = $props();
   const R = 20;
   const C = 2 * Math.PI * R;
   const frac = $derived(total ? Math.min(1, seconds / total) : 0);
   const urgent = $derived(seconds <= 10);
 </script>
 
-<div class="timer" class:urgent role="timer" aria-label="{seconds} seconds left">
+<div class="timer" class:urgent class:small role="timer" aria-label="{seconds} seconds left">
   <svg viewBox="0 0 50 50" aria-hidden="true">
     <circle cx="25" cy="25" r={R} class="bg" />
     <circle cx="25" cy="25" r={R} class="fg" stroke-dasharray={C} stroke-dashoffset={C * (1 - frac)} />
@@ -20,6 +20,10 @@
     width: 50px;
     height: 50px;
     flex: none;
+  }
+  .timer.small {
+    width: 40px;
+    height: 40px;
   }
   svg {
     width: 100%;
@@ -50,6 +54,9 @@
     font-family: var(--font-display);
     font-weight: 700;
     font-size: 1.15rem;
+  }
+  .small span {
+    font-size: 0.95rem;
   }
   .urgent span {
     color: var(--red);

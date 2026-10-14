@@ -18,27 +18,31 @@
           .join(' ')
       : '',
   );
-  const fs = $derived(mask.length <= 8 ? 1.7 : mask.length <= 12 ? 1.35 : mask.length <= 16 ? 1.1 : 0.92);
+  const shownWord = $derived(turn?.reveal?.word ?? turn?.word ?? '');
+  // Letter count drives the size: the blanks always fit the available width.
+  const n = $derived(Math.max(5, mask.length || Array.from(shownWord).length));
 </script>
 
-<div class="hint">
+<div class="hint" style:--n={n}>
   {#if s.phase === 'choosing'}
     <span class="lbl">{isDrawer ? 'Your turn!' : 'Get ready…'}</span>
     <span class="msg">{isDrawer ? '✏️ Pick a word to draw' : `✏️ ${drawer?.name ?? 'Someone'} is choosing`}</span>
   {:else if s.phase === 'drawing' && turn}
     {#if isDrawer}
       <span class="lbl">Draw this</span>
-      <span class="word" style:--fs="{fs}rem">{turn.word}</span>
+      <span class="word">{turn.word}</span>
     {:else if me?.guessed}
       <span class="lbl ok">You got it! 🎉</span>
-      <span class="word ok" style:--fs="{fs}rem">{turn.word}</span>
+      <span class="word ok">{turn.word}</span>
     {:else}
       <span class="lbl">
-        {#if s.settings.mode === 'teams' && !turn.canGuess}
-          Watch — {TEAMS[turn.team].name} are guessing
-        {:else}
-          Guess the word
-        {/if}
+        <span class="lbl-text">
+          {#if s.settings.mode === 'teams' && !turn.canGuess}
+            {TEAMS[turn.team].name} guessing
+          {:else}
+            Guess the word
+          {/if}
+        </span>
         <span class="count">{lengths}</span>
         {#if turn.hintsTotal > 0}
           <span class="bulbs" title="Letter hints revealed">
@@ -46,7 +50,7 @@
           </span>
         {/if}
       </span>
-      <span class="slots" style:--fs="{fs}rem" aria-label="Word with {mask.length} characters">
+      <span class="slots" aria-label="Word with {mask.length} characters">
         {#each mask as ch, i (i)}
           {#if ch === ' '}
             <span class="gap"></span>
@@ -60,7 +64,7 @@
     {/if}
   {:else if s.phase === 'turnEnd' && turn?.reveal?.word}
     <span class="lbl">The word was</span>
-    <span class="word" style:--fs="{fs}rem">{turn.reveal.word}</span>
+    <span class="word">{turn.reveal.word}</span>
   {:else if s.phase === 'gameOver'}
     <span class="msg">🏁 Game over!</span>
   {:else}
@@ -70,6 +74,8 @@
 
 <style>
   .hint {
+    container-type: inline-size;
+    width: 100%;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -86,8 +92,8 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    flex-wrap: wrap;
     justify-content: center;
+    white-space: nowrap;
   }
   .lbl.ok {
     color: #15803d;
@@ -98,6 +104,9 @@
     border-radius: 6px;
     padding: 0 6px;
     letter-spacing: 0.05em;
+  }
+  .bulbs {
+    display: flex;
   }
   .bulbs span {
     filter: grayscale(1) opacity(0.35);
@@ -110,13 +119,17 @@
   .msg {
     font-family: var(--font-display);
     font-weight: 600;
-    font-size: 1.25rem;
+    font-size: clamp(0.9rem, 6.5cqi, 1.25rem);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
   }
   .word {
     font-family: var(--font-display);
     font-weight: 700;
-    font-size: var(--fs);
-    letter-spacing: 0.08em;
+    font-size: max(0.95rem, min(1.7rem, calc(100cqi / (var(--n) * 0.85))));
+    letter-spacing: 0.06em;
     text-transform: uppercase;
     line-height: 1.1;
     overflow-wrap: anywhere;
@@ -125,21 +138,22 @@
     color: #15803d;
   }
   .slots {
+    --size: max(0.85rem, min(1.7rem, calc(100cqi / (var(--n) * 1.2))));
     display: flex;
     flex-wrap: wrap;
     justify-content: center;
-    gap: calc(var(--fs) * 0.18);
+    gap: calc(var(--size) * 0.18);
     row-gap: 4px;
   }
   .slot {
-    width: calc(var(--fs) * 0.95);
-    height: calc(var(--fs) * 1.25);
-    border-bottom: 4px solid var(--ink);
+    width: calc(var(--size) * 0.95);
+    height: calc(var(--size) * 1.25);
+    border-bottom: 3px solid var(--ink);
     display: grid;
     place-items: center;
     font-family: var(--font-display);
     font-weight: 700;
-    font-size: var(--fs);
+    font-size: var(--size);
     text-transform: uppercase;
     line-height: 1;
   }
@@ -148,22 +162,15 @@
     animation: pop-in 0.45s ease;
   }
   .gap {
-    width: calc(var(--fs) * 0.6);
+    width: calc(var(--size) * 0.6);
   }
-  @media (max-width: 860px) {
-    .hint {
-      --scale: 0.72;
-    }
-    .slots,
-    .word {
-      zoom: 0.75;
-    }
-    .msg {
-      font-size: 0.95rem;
-    }
+  @container (max-width: 260px) {
     .lbl {
       font-size: 0.62rem;
-      gap: 4px;
+      gap: 5px;
+    }
+    .lbl-text {
+      display: none;
     }
   }
 </style>

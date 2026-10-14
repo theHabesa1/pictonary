@@ -169,7 +169,7 @@
   }
   select.input {
     padding: 9px 10px;
-    font-size: 0.98rem;
+    font-size: 1rem; /* 16px+ stops iPhones zooming in on tap */
     cursor: pointer;
   }
   .locked select.input,

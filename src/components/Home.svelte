@@ -83,7 +83,7 @@
       <button class="btn green big wide" disabled={busy} onclick={join}>
         🚪 Join room <b class="code">{urlCode}</b>
       </button>
-      <a class="small-link" href="/">or create your own room</a>
+      <a class="small-link" href={location.pathname}>or create your own room</a>
     {:else}
       <button class="btn green big wide" disabled={busy} onclick={create}>✨ Create a room</button>
 
@@ -278,12 +278,33 @@
     .how {
       grid-template-columns: 1fr;
     }
+    .home {
+      padding-top: 18px;
+      gap: 14px;
+    }
+    .panel {
+      padding: 16px;
+    }
+    .how {
+      gap: 8px;
+    }
     .step {
       display: grid;
-      grid-template-columns: 44px 1fr;
+      grid-template-columns: 40px 1fr;
       text-align: left;
       column-gap: 8px;
       align-items: center;
+      padding: 10px 12px;
+    }
+    .step span {
+      font-size: 1.5rem;
+    }
+    .step h3 {
+      font-size: 0.95rem;
+      margin: 0 0 2px;
+    }
+    .step p {
+      font-size: 0.8rem;
     }
     .step span {
       grid-row: span 2;

@@ -46,6 +46,7 @@
     {/each}
   </div>
 
+  <div class="tools-row">
   <div class="group sizes" role="radiogroup" aria-label="Brush size">
     {#each BRUSH_SIZES as sz, i}
       <button class="tool size" class:on={tools.size === sz} title={tip('Size', i + 1)} onclick={() => (tools.size = sz)}>
@@ -63,6 +64,7 @@
   <div class="group">
     <button class="tool" title={tip('Undo', 'Ctrl+Z')} onclick={() => board.undo()}>↩️</button>
     <button class="tool" title="Clear canvas" onclick={() => board.clear()}>🗑️</button>
+  </div>
   </div>
 </div>
 
@@ -151,24 +153,55 @@
     border-radius: 50%;
     border: 1px solid rgba(0, 0, 0, 0.2);
   }
+  .tools-row {
+    display: contents;
+  }
   @media (max-width: 600px) {
     .toolbar {
+      flex-direction: column;
+      align-items: stretch;
       gap: 6px;
       padding: 6px;
+      border-radius: 14px;
     }
     .colors {
       grid-template-columns: repeat(11, minmax(0, 1fr));
-      grid-auto-rows: 22px;
+      grid-auto-rows: 24px;
       width: 100%;
     }
     .swatch {
       width: 100%;
-      height: 22px;
+      height: 24px;
+    }
+    .swatch:hover {
+      transform: none;
+    }
+    .tools-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 4px;
+    }
+    .group {
+      gap: 2px;
+      padding: 2px;
     }
     .tool {
-      width: 36px;
-      height: 36px;
-      font-size: 1.1rem;
+      width: 32px;
+      height: 34px;
+      font-size: 1.05rem;
+    }
+    .size {
+      width: 28px;
+    }
+  }
+  @media (max-width: 360px) {
+    .tool {
+      width: 28px;
+      height: 32px;
+      font-size: 0.95rem;
+    }
+    .size {
+      width: 25px;
     }
   }
 </style>

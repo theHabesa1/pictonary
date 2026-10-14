@@ -132,17 +132,41 @@
       opacity: 0;
     }
   }
-  @media (max-width: 600px) {
-    .choice {
-      min-width: 0;
-      padding: 10px 12px 8px;
+  /* Small boards (phones): the board is a size container. */
+  @container (max-height: 360px) {
+    .overlay {
+      gap: 6px;
+      padding: 10px;
     }
-    .big-av {
-      font-size: 3rem;
+    h2 {
+      font-size: 1.1rem;
+    }
+    .sub {
+      font-size: 0.82rem;
     }
     .choices {
-      gap: 8px;
-      margin: 4px 0;
+      gap: 6px;
+      margin: 2px 0;
+    }
+    .choice {
+      min-width: 0;
+      padding: 8px 12px 6px;
+      gap: 4px;
+      border-radius: 12px;
+      box-shadow: 0 3px 0 var(--c);
+    }
+    .w {
+      font-size: 1rem;
+    }
+    .tag {
+      font-size: 0.65rem;
+      padding: 1px 8px;
+    }
+    .auto {
+      font-size: 0.8rem;
+    }
+    .big-av {
+      font-size: 2.4rem;
     }
   }
 </style>

@@ -1,11 +1,16 @@
 <script>
   import { tick } from 'svelte';
-  import { TEAMS } from '../../shared/constants.js';
+  import { REACTIONS, TEAMS } from '../../shared/constants.js';
   import { game, send } from '../lib/game.svelte.js';
 
-  let { compact = false } = $props();
+  // compact: no header (lobby, phones). reactions: show the emoji button in the input row (phones).
+  let { compact = false, reactions = false } = $props();
 
   let text = $state('');
+  let showReact = $state(false);
+  $effect(() => {
+    if (!reactions) showReact = false;
+  });
   let list;
   let stick = true;
 
@@ -65,7 +70,24 @@
       {/if}
     {/each}
   </ul>
+  {#if showReact}
+    <div class="react-row">
+      {#each REACTIONS as r}
+        <button type="button" onclick={() => send('react', r)} aria-label="React {r}">{r}</button>
+      {/each}
+    </div>
+  {/if}
   <form class="send" onsubmit={submit}>
+    {#if reactions}
+      <button
+        type="button"
+        class="react-toggle"
+        class:on={showReact}
+        aria-label="Reactions"
+        aria-expanded={showReact}
+        onclick={() => (showReact = !showReact)}>😀</button
+      >
+    {/if}
     <input
       class="input"
       bind:value={text}
@@ -181,6 +203,55 @@
     flex: none;
     width: 46px;
     font-size: 1.1rem;
+  }
+  .react-toggle {
+    flex: none;
+    width: 42px;
+    border: 2px solid var(--line);
+    border-radius: 12px;
+    background: #fff;
+    font-size: 1.25rem;
+    padding: 0;
+  }
+  .react-toggle.on {
+    border-color: var(--ink);
+    background: var(--yellow);
+  }
+  .react-row {
+    display: flex;
+    justify-content: space-around;
+    padding: 4px 8px 0;
+    border-top: 2px solid var(--line);
+    animation: slide 0.15s ease;
+  }
+  .react-row button {
+    border: none;
+    background: none;
+    font-size: 1.5rem;
+    width: 44px;
+    height: 40px;
+    border-radius: 10px;
+  }
+  .react-row button:active {
+    transform: scale(0.85);
+    background: #f1edff;
+  }
+  .compact .msgs {
+    padding: 6px 8px;
+  }
+  .compact .msg {
+    font-size: 0.9rem;
+    padding: 3px 5px;
+  }
+  .compact .sys {
+    font-size: 0.8rem;
+    padding: 2px 4px;
+  }
+  .compact .send {
+    padding: 6px;
+  }
+  .compact .react-row + .send {
+    border-top: none;
   }
   @keyframes slide {
     from {
