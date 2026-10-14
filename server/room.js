@@ -10,8 +10,12 @@ export const uid = (bytes = 9) => crypto.randomBytes(bytes).toString('base64url'
 const MAX_OPS = 4000;
 const MAX_STROKE_NUMBERS = 8000; // x,y pairs per stroke
 const CHAT_LOG = 60;
-const LOBBY_GRACE_MS = 30_000; // keep a disconnected player's seat this long in the lobby
-const GAME_GRACE_MS = 5 * 60_000; // ...and this long during a game (so refreshes don't lose points)
+// Disconnects: during a game a player's seat (and score) is kept until the game ends.
+const LOBBY_GRACE_MS = 3 * 60_000; // in the lobby, free a disconnected player's seat after this
+const DRAWER_GRACE_MS = 20_000; // a disconnected drawer gets this long to come back before we skip
+const HOST_GRACE_MS = 30_000; // the host keeps the crown this long while disconnected
+const SHORT_HANDED_MS = 90_000; // under 2 players online: wait this long for people before ending
+const EMPTY_ROOM_MS = 30 * 60_000; // nobody online at all: delete the room after this
 
 const round5 = (n) => Math.max(5, Math.round(n / 5) * 5);
 const shuffle = (arr) => {
@@ -89,6 +93,8 @@ export class Room {
     this.chatLog = [];
     this.gameOverReason = '';
     this.emptySince = 0;
+    this.shortSince = 0; // when the game dropped below 2 online players
+    this.missed = new Set(); // players whose turn came up while they were away this round
   }
 
   // ───────────────────────── players ─────────────────────────
@@ -105,23 +111,28 @@ export class Room {
     return counts.indexOf(Math.min(...counts));
   }
 
-  join(socket, { name, avatar, token }) {
+  join(socket, { name, avatar, token, takeover = true }) {
     let p = token ? this.byToken.get(token) : null;
     if (p) {
-      // Same person coming back (refresh, flaky wifi, new tab).
-      if (p.socketId && p.socketId !== socket.id) {
-        const old = this.io.sockets.sockets.get(p.socketId);
-        if (old) {
-          old.leave(this.code);
-          old.data.code = null;
-          old.emit('kicked', { reason: 'You opened the game in another tab.' });
-        }
+      // Same person coming back (refresh, flaky wifi, reopened the link, new tab).
+      const old = p.socketId && p.socketId !== socket.id ? this.io.sockets.sockets.get(p.socketId) : null;
+      if (old) {
+        // Seat is live somewhere else: ask before taking it over.
+        if (!takeover) return { error: 'seat_active', name: p.name };
+        old.leave(this.code);
+        old.data.code = null;
+        old.emit('kicked', { reason: 'You continued this game in another tab or device.', takeover: true });
       }
       const wasAway = !p.connected;
       p.connected = true;
       p.disconnectedAt = 0;
       p.socketId = socket.id;
-      if (wasAway) this.system(`${p.name} is back`, 'join');
+      if (wasAway) this.system(`👋 ${p.name} is back!`, 'join');
+      // Their turn came up while they were away: let them draw later this round.
+      if (this.inGame() && this.missed.delete(p.id)) {
+        if (!this.queue.includes(p.id)) this.queue.push(p.id);
+        setTimeout(() => this.whisper(p.id, "Welcome back! You missed your turn, so you'll draw again later this round 🎨"), 300);
+      }
     } else {
       if (this.players.size >= MAX_PLAYERS) return { error: `This room is full (${MAX_PLAYERS} players max).` };
       let base = cleanName(name);
@@ -150,7 +161,7 @@ export class Room {
     socket.join(this.code);
     socket.data.code = this.code;
     socket.data.pid = p.id;
-    if (!this.players.get(this.hostId)?.connected) this.hostId = p.id;
+    if (!this.hostAvailable()) this.hostId = p.id;
     this.emptySince = 0;
 
     socket.emit('chat:history', this.chatLog);
@@ -165,8 +176,9 @@ export class Room {
     p.connected = false;
     p.socketId = null;
     p.disconnectedAt = Date.now();
-    this.system(`${p.name} left`, 'leave');
-    this.afterPlayerGone(p);
+    if (this.phase === 'lobby') this.system(`${p.name} left`, 'leave');
+    else this.system(`📶 ${p.name} lost connection — their spot is saved`, 'leave');
+    this.afterPlayerGone(p, false);
   }
 
   remove(pid, msg) {
@@ -174,31 +186,37 @@ export class Room {
     if (!p) return;
     this.players.delete(pid);
     this.byToken.delete(p.token);
+    this.missed.delete(pid);
     if (p.connected && msg) this.system(msg, 'leave');
     p.connected = false;
-    this.afterPlayerGone(p);
+    this.afterPlayerGone(p, true);
   }
 
-  afterPlayerGone(p) {
-    if (this.hostId === p.id || !this.players.get(this.hostId)?.connected) {
-      const next = this.connectedPlayers().sort((a, b) => a.joinedAt - b.joinedAt)[0];
-      if (next) {
-        if (next.id !== this.hostId) this.system(`${next.name} is now the host 👑`);
-        this.hostId = next.id;
-      }
+  /** `left` = gone for good (Leave button / kicked); otherwise just disconnected. */
+  afterPlayerGone(p, left) {
+    this.ensureHost();
+    // A drawer who only lost connection gets DRAWER_GRACE_MS to come back (see tick).
+    if (left && this.turn?.drawerId === p.id && (this.phase === 'choosing' || this.phase === 'drawing')) {
+      this.endTurn('drawer_left');
+      return;
     }
-    if (this.inGame()) {
-      if (this.connectedPlayers().length < 2) {
-        this.endGame('Not enough players left to keep going.');
-        return;
-      }
-      if (this.turn?.drawerId === p.id && (this.phase === 'choosing' || this.phase === 'drawing')) {
-        this.endTurn('drawer_left');
-        return;
-      }
-      if (this.phase === 'drawing') this.checkAllGuessed();
-    }
+    if (this.phase === 'drawing' && this.checkAllGuessed()) return;
     this.broadcast();
+  }
+
+  hostAvailable(now = Date.now()) {
+    const h = this.players.get(this.hostId);
+    return !!h && (h.connected || now - h.disconnectedAt < HOST_GRACE_MS);
+  }
+
+  /** Hand the crown to the longest-standing online player if the host is gone. */
+  ensureHost(now = Date.now()) {
+    if (this.hostAvailable(now)) return false;
+    const next = this.connectedPlayers().sort((a, b) => a.joinedAt - b.joinedAt)[0];
+    if (!next || next.id === this.hostId) return false;
+    this.hostId = next.id;
+    this.system(`${next.name} is now the host 👑`);
+    return true;
   }
 
   inGame() {
@@ -264,13 +282,17 @@ export class Room {
     this.round = 1;
     this.queue = this.buildQueue();
     this.gameOverReason = '';
+    this.shortSince = 0;
     this.system(`🎨 Game on! ${this.settings.rounds} round${this.settings.rounds > 1 ? 's' : ''} — good luck!`);
     this.nextTurn();
   }
 
   /** Order of drawers for one round. In teams mode teams alternate and everyone draws once. */
   buildQueue() {
-    const players = this.connectedPlayers().sort((a, b) => a.joinedAt - b.joinedAt);
+    // Everyone with a seat is queued; players who are away when their turn comes are skipped
+    // (and get a turn later in the round if they come back in time).
+    this.missed.clear();
+    const players = [...this.players.values()].sort((a, b) => a.joinedAt - b.joinedAt);
     if (this.settings.mode !== 'teams') return players.map((p) => p.id);
     const groups = [];
     for (let t = 0; t < this.settings.teamCount; t++) {
@@ -293,6 +315,7 @@ export class Room {
       while (this.queue.length && !drawer) {
         const p = this.players.get(this.queue.shift());
         if (p?.connected) drawer = p;
+        else if (p) this.missed.add(p.id);
       }
       if (drawer) break;
       this.round++;
@@ -428,7 +451,9 @@ export class Room {
     } else if (reason === 'all_guessed') {
       this.system(`✨ Everyone guessed it! The word was "${t.word}"`);
     } else if (reason === 'drawer_left' && drawer) {
-      this.system(`${drawer.name} left, so we skip to the next turn`);
+      // Still seated, just disconnected: they get another go if they're back this round.
+      this.missed.add(drawer.id);
+      this.system(`📶 ${drawer.name} is still away, so we skip ahead. They'll get another turn if they're back this round`);
     } else if (reason === 'drawer_left') {
       this.system('The drawer left, so we skip to the next turn');
     } else if (reason === 'skipped') {
@@ -458,6 +483,8 @@ export class Room {
     this.turn = null;
     this.ops = [];
     this.queue = [];
+    this.missed.clear();
+    this.shortSince = 0;
     this.gameOverReason = reason;
     this.system(reason ? `🏁 Game over — ${reason}` : '🏁 Game over! Thanks for playing 🎉');
     this.broadcast();
@@ -470,6 +497,8 @@ export class Room {
     this.turn = null;
     this.ops = [];
     this.queue = [];
+    this.missed.clear();
+    this.shortSince = 0;
     this.round = 0;
     for (const p of this.players.values()) p.score = 0;
     this.teamScores = TEAMS.map(() => 0);
@@ -479,29 +508,54 @@ export class Room {
   /** Called ~4x per second by the server loop. Returns false when the room can be deleted. */
   tick(now) {
     const t = this.turn;
-    if (this.phase === 'choosing' && t && now >= t.endsAt) {
-      this.startDrawing(t.choices[Math.floor(Math.random() * t.choices.length)]);
+    const online = this.connectedPlayers().length;
+    const drawer = t && this.players.get(t.drawerId);
+    const drawerGone = !drawer || (!drawer.connected && now - drawer.disconnectedAt > DRAWER_GRACE_MS);
+
+    if (this.phase === 'choosing' && t && (now >= t.endsAt || drawerGone)) {
+      if (drawer?.connected) this.startDrawing(t.choices[Math.floor(Math.random() * t.choices.length)]);
+      else this.endTurn('drawer_left');
     } else if (this.phase === 'drawing' && t) {
       let changed = false;
       while (t.revealed.length < t.revealOrder.length && now >= t.hintTimes[t.revealed.length]) {
         t.revealed.push(t.revealOrder[t.revealed.length]);
         changed = true;
       }
-      if (now >= t.endsAt) this.endTurn('time');
+      if (drawerGone) this.endTurn('drawer_left');
+      else if (now >= t.endsAt) this.endTurn('time');
       else if (changed) this.broadcast();
-    } else if (this.phase === 'turnEnd' && t && now >= t.endsAt) {
+    } else if (this.phase === 'turnEnd' && t && now >= t.endsAt && online >= 2) {
       this.nextTurn();
     }
 
-    // Forget seats of people who have been gone too long.
-    const grace = this.inGame() ? GAME_GRACE_MS : LOBBY_GRACE_MS;
-    for (const p of [...this.players.values()]) {
-      if (!p.connected && now - p.disconnectedAt > grace) this.remove(p.id);
+    // Fewer than 2 people online mid-game: pause between turns and give them time to reconnect.
+    if (this.inGame() && online < 2) {
+      if (!this.shortSince) {
+        this.shortSince = now;
+        this.broadcast();
+      } else if (now - this.shortSince > SHORT_HANDED_MS) {
+        this.endGame('Not enough players came back in time.');
+      }
+    } else if (this.shortSince) {
+      this.shortSince = 0;
+      this.broadcast();
     }
 
-    if (!this.connectedPlayers().length) {
+    if (this.ensureHost(now)) this.broadcast();
+
+    // In the lobby, free seats of people who left a while ago. During a game (and on the
+    // results screen) seats are kept, so anyone can come back until the game is over.
+    if (this.phase === 'lobby') {
+      for (const p of [...this.players.values()]) {
+        if (!p.connected && now - p.disconnectedAt > LOBBY_GRACE_MS) this.remove(p.id);
+      }
+    }
+
+    if (!online) {
       this.emptySince ||= now;
-      if (now - this.emptySince > 10 * 60_000 || !this.players.size) return false;
+      if (now - this.emptySince > EMPTY_ROOM_MS || !this.players.size) return false;
+    } else {
+      this.emptySince = 0;
     }
     return true;
   }
@@ -664,6 +718,8 @@ export class Room {
       settings: this.settings,
       teamScores: this.teamScores,
       gameOverReason: this.gameOverReason,
+      // Set while the game is paused waiting for disconnected players to come back.
+      waitingUntil: this.shortSince ? this.shortSince + SHORT_HANDED_MS : null,
       players: [...this.players.values()]
         .sort((a, b) => a.joinedAt - b.joinedAt)
         .map((p) => ({

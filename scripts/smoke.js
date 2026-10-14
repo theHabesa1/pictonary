@@ -93,16 +93,102 @@ async function soloGame() {
   await a.until((s) => s.phase === 'gameOver', 'game over', 12000);
   console.log('✓ solo: rounds advance and game ends');
 
-  // Reconnect with token keeps the seat.
+  // Reconnect with token keeps the seat; the host keeps the crown during a short blip.
   const token = created.token;
   a.s.disconnect();
   await b.until((s) => !s.players.find((p) => p.name === 'Alice').connected, 'alice away');
-  assert.equal(b.state.hostId !== created.id, true, 'host migrated');
+  assert.equal(b.state.hostId, created.id, 'host kept during grace period');
   const a2 = player('Alice');
   const re = await a2.emit('room:join', { code, token });
   assert.equal(re.id, created.id, 'same seat after reconnect');
-  console.log('✓ reconnect keeps seat, host migrates');
-  for (const p of [a2, b, c]) p.s.disconnect();
+  // A second device with the saved seat must ask before taking it over.
+  const a3 = player('Alice');
+  const conflict = await a3.emit('room:join', { code, token, takeover: false });
+  assert.equal(conflict.error, 'seat_active', 'live seat is not stolen silently');
+  let kicked = null;
+  a2.s.on('kicked', (k) => (kicked = k));
+  const moved = await a3.emit('room:join', { code, token, takeover: true });
+  assert.equal(moved.id, created.id, 'seat moved to new device');
+  await sleep(150);
+  assert.equal(kicked?.takeover, true, 'old tab told the seat moved');
+  console.log('✓ reconnect keeps seat; host kept during blip; seat takeover asks first');
+  for (const p of [a2, a3, b, c]) p.s.disconnect();
+}
+
+async function dropoutTest() {
+  // 2-player game: one player drops mid-turn. The game must wait for them, keep their score,
+  // and carry on when they come back.
+  const a = player('Dina');
+  const b = player('Eli');
+  const created = await a.emit('room:create', { name: 'Dina' });
+  const { code } = created;
+  const joined = await b.emit('room:join', { code, name: 'Eli' });
+  a.s.emit('settings:update', { drawTime: 60, rounds: 2 });
+  await a.until((s) => s.players.length === 2 && s.settings.rounds === 2, 'settings');
+  a.s.emit('game:start');
+  await a.until((s) => s.phase === 'choosing', 'choosing');
+  const drawer = a.state.turn.drawerId === a.state.me ? a : b;
+  const guesser = drawer === a ? b : a;
+  drawer.s.emit('word:choose', 0);
+  await guesser.until((s) => s.phase === 'drawing', 'drawing');
+  guesser.s.emit('chat', drawer.state.turn.word);
+  await drawer.until((s) => s.phase === 'turnEnd', 'turn end');
+  const score = drawer.state.players.find((p) => p.id === guesser.state.me).score;
+  assert.ok(score > 0, 'guesser scored');
+
+  // Guesser drops (e.g. phone locked).
+  const token = guesser === a ? created.token : joined.token;
+  guesser.s.disconnect();
+  await drawer.until((s) => s.waitingUntil, 'game waits for players');
+  assert.notEqual(drawer.state.phase, 'gameOver', 'game did not end on disconnect');
+  const away = drawer.state.players.find((p) => p.id === guesser.state.me);
+  assert.equal(away.connected, false);
+  assert.equal(away.score, score, 'score kept while away');
+  await sleep(8000); // longer than the turn-end screen: the game must hold, not move on
+  assert.equal(drawer.state.phase, 'turnEnd', 'game paused between turns while short-handed');
+
+  const back = player(guesser.name);
+  const res = await back.emit('room:join', { code, token });
+  assert.equal(res.id, guesser.state.me, 'same seat');
+  await back.until((s) => !s.waitingUntil && s.players.find((p) => p.id === s.me).score === score, 'resumed with score');
+  await back.until((s) => s.phase === 'choosing', 'next turn starts', 5000);
+  console.log('✓ dropout: game pauses, score kept, resumes when they return');
+  back.s.disconnect();
+  drawer.s.disconnect();
+}
+
+async function drawerGraceTest() {
+  // The drawer drops mid-drawing and comes back: the turn and the drawing survive.
+  const ps = ['Fay', 'Gus', 'Hal'].map(player);
+  const created = await ps[0].emit('room:create', { name: 'Fay' });
+  const tokens = [created.token];
+  for (const p of ps.slice(1)) tokens.push((await p.emit('room:join', { code: created.code, name: p.name })).token);
+  await ps[0].until((s) => s.players.length === 3, '3 players');
+  ps[0].s.emit('game:start');
+  await ps[0].until((s) => s.phase === 'choosing', 'choosing');
+  const di = ps.findIndex((p) => p.state.me === ps[0].state.turn.drawerId);
+  const drawer = ps[di];
+  drawer.s.emit('word:choose', 0);
+  await drawer.until((s) => s.phase === 'drawing', 'drawing');
+  const turnId = drawer.state.turn.id;
+  drawer.s.emit('draw:op', { type: 'stroke', id: 'keep1', color: '#000000', size: 12, points: [100, 100] });
+  await sleep(150);
+  drawer.s.disconnect();
+  await sleep(2500);
+  const watcher = ps[(di + 1) % 3];
+  assert.equal(watcher.state.phase, 'drawing', 'turn not skipped right away');
+  assert.equal(watcher.state.turn.id, turnId);
+
+  const back = player(drawer.name);
+  let synced = null;
+  back.s.on('draw:sync', (d) => (synced = d));
+  const res = await back.emit('room:join', { code: created.code, token: tokens[di] });
+  assert.equal(res.id, drawer.state.me);
+  await back.until((s) => s.phase === 'drawing' && s.turn.word, 'drawer back mid-turn');
+  await sleep(150);
+  assert.ok(synced?.ops.some((o) => o.id === 'keep1'), 'drawing restored on return');
+  console.log('✓ drawer grace: turn kept and drawing restored when the drawer comes back');
+  for (const p of [...ps, back]) p.s.disconnect();
 }
 
 async function hintTest() {
@@ -163,6 +249,8 @@ try {
   await soloGame();
   await hintTest();
   await teamGame();
+  await dropoutTest();
+  await drawerGraceTest();
   console.log('\nAll smoke tests passed 🎉');
   process.exit(0);
 } catch (err) {

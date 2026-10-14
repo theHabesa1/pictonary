@@ -2,14 +2,17 @@ import { io } from 'socket.io-client';
 import { AVATARS } from '../../shared/constants.js';
 import { setMuted, sfx } from './sound.js';
 
-export const socket = io();
+export const socket = io({ reconnectionDelay: 500, reconnectionDelayMax: 3000 });
 
 const PROFILE_KEY = 'pictonary.profile';
 const SESSION_KEY = 'pictonary.session';
+const SEATS_KEY = 'pictonary.seats';
 const MUTED_KEY = 'pictonary.muted';
+const SEAT_TTL = 24 * 60 * 60_000;
 
-// The room seat lives in sessionStorage (one player per tab, survives refresh);
-// name, avatar and mute live in localStorage.
+// This tab's seat lives in sessionStorage (survives refresh). Every seat is also saved in
+// localStorage (SEATS_KEY) so closing the tab or browser and reopening the invite link puts
+// you straight back in your spot. Name, avatar and mute also live in localStorage.
 const store = (key) => (key === SESSION_KEY ? sessionStorage : localStorage);
 
 function load(key, fallback) {
@@ -42,14 +45,42 @@ export const game = $state({
   now: Date.now(), // server-synced clock, ticks 5x per second
   offset: 0,
   error: '',
-  joining: false,
+  joining: false, // rejoining a saved seat
+  seatConflict: null, // { code, name } when the saved seat is open in another tab/device
   muted: load(MUTED_KEY, false),
 });
 setMuted(game.muted);
 
 setInterval(() => (game.now = Date.now() + game.offset), 200);
 
+// ───────────────────────── saved seats ─────────────────────────
+
+function loadSeats() {
+  const seats = load(SEATS_KEY, {});
+  for (const [code, seat] of Object.entries(seats)) if (Date.now() - seat.at > SEAT_TTL) delete seats[code];
+  return seats;
+}
+function rememberSeat(code, token) {
+  save(SEATS_KEY, { ...loadSeats(), [code]: { token, at: Date.now() } });
+}
+function forgetSeat(code) {
+  const seats = loadSeats();
+  delete seats[code];
+  save(SEATS_KEY, seats);
+}
+
+/** Most recent saved seat, offered on the home page as "jump back in". */
+export const lastSeat = () =>
+  Object.entries(loadSeats())
+    .map(([code, seat]) => ({ code, at: seat.at }))
+    .sort((a, b) => b.at - a.at)[0] ?? null;
+
+// `fromSaved`: the token came from another tab/visit, so don't steal the seat if it's live.
 let session = load(SESSION_KEY, null);
+if (urlCode && session?.code !== urlCode) {
+  const seat = loadSeats()[urlCode];
+  session = seat ? { code: urlCode, token: seat.token, fromSaved: true } : null;
+}
 let autoRejoin = !!(session && urlCode && session.code === urlCode);
 if (autoRejoin) game.joining = true;
 
@@ -63,17 +94,39 @@ function setUrl(code) {
 function entered(res) {
   session = { code: res.code, token: res.token };
   save(SESSION_KEY, session);
+  rememberSeat(res.code, res.token);
   setUrl(res.code);
   game.error = '';
+  game.seatConflict = null;
 }
 
-function resetToHome(error = '') {
+function resetToHome(error = '', forget = true) {
+  if (forget && session) forgetSeat(session.code);
   session = null;
   save(SESSION_KEY, null);
   game.state = null;
   game.messages = [];
   game.error = error;
+  game.joining = false;
   setUrl(null);
+}
+
+function requestJoin(code, token, takeover) {
+  return new Promise((resolve) => {
+    socket.emit('room:join', { code, token, takeover, name: profile.name, avatar: profile.avatar }, (res) => {
+      game.joining = false;
+      if (res?.error === 'seat_active') {
+        game.seatConflict = { code, name: res.name };
+      } else if (res?.error) {
+        forgetSeat(code);
+        if (game.state) resetToHome(res.error);
+        else game.error = res.error;
+      } else {
+        entered(res);
+      }
+      resolve(res);
+    });
+  });
 }
 
 export function saveProfile() {
@@ -92,26 +145,38 @@ export function createRoom() {
   });
 }
 
+/** Join by code. Reclaims your saved seat in that room if you have one. */
 export function joinRoom(code) {
   saveProfile();
-  const token = session?.code === code.toUpperCase() ? session.token : undefined;
-  return new Promise((resolve) => {
-    socket.emit('room:join', { code, token, name: profile.name, avatar: profile.avatar }, (res) => {
-      if (res?.error) game.error = res.error;
-      else entered(res);
-      resolve(res);
-    });
-  });
+  code = code.toUpperCase();
+  if (session?.code === code && !session.fromSaved) return requestJoin(code, session.token, true);
+  const saved = loadSeats()[code];
+  return requestJoin(code, saved?.token, false);
+}
+
+/** Seat is open in another tab/device: move it here. */
+export function takeOverSeat() {
+  const c = game.seatConflict;
+  const saved = c && loadSeats()[c.code];
+  if (!saved) return joinAsNewPlayer();
+  game.joining = true;
+  return requestJoin(c.code, saved.token, true);
+}
+
+/** Seat is open elsewhere, but this is a different person on the same device. */
+export function joinAsNewPlayer() {
+  const c = game.seatConflict;
+  if (!c) return;
+  game.seatConflict = null;
+  session = null;
+  saveProfile();
+  return requestJoin(c.code, undefined, true);
 }
 
 function rejoin() {
   if (!session) return;
   game.joining = true;
-  socket.emit('room:join', { ...session, name: profile.name, avatar: profile.avatar }, (res) => {
-    game.joining = false;
-    if (res?.error) resetToHome(res.error);
-    else entered(res);
-  });
+  requestJoin(session.code, session.token, !session.fromSaved);
 }
 
 export function leaveRoom() {
@@ -138,6 +203,11 @@ socket.on('connect', () => {
 });
 
 socket.on('disconnect', () => (game.connected = false));
+
+// Phones pause background tabs; reconnect right away when the game comes back on screen.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && !socket.connected) socket.connect();
+});
 
 socket.on('state', (s) => {
   game.offset = s.serverNow - Date.now();
@@ -168,7 +238,8 @@ socket.on('react', ({ emoji }) => {
   }, 2600);
 });
 
-socket.on('kicked', ({ reason }) => resetToHome(reason));
+// `takeover`: the same seat moved to another tab/device — keep it saved for that one.
+socket.on('kicked', ({ reason, takeover }) => resetToHome(reason, !takeover));
 
 function playTransitionSounds(prev, s) {
   if (!prev) return;

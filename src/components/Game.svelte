@@ -138,6 +138,13 @@
       <div class="board card" style:width="{boardW}px" style:height="{(boardW * 3) / 4}px">
         <Canvas {canDraw} />
         <Reactions />
+        {#if s.waitingUntil}
+          <div class="board-note" role="status">
+            ⏳ Waiting for players to reconnect… ({Math.max(0, Math.ceil((s.waitingUntil - game.now) / 1000))}s)
+          </div>
+        {:else if drawer && !drawer.connected && (s.phase === 'drawing' || s.phase === 'choosing')}
+          <div class="board-note" role="status">📶 {drawer.name} lost connection — giving them a moment to come back…</div>
+        {/if}
         {#if s.phase === 'choosing' && turn}
           <ChooseWord {turn} {drawer} {isDrawer} seconds={secondsLeft} />
         {:else if s.phase === 'turnEnd' && turn?.reveal}
@@ -320,6 +327,24 @@
     border-radius: 16px;
     background: #fff;
     container-type: size;
+  }
+  .board-note {
+    position: absolute;
+    top: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 6;
+    width: max-content;
+    max-width: calc(100% - 16px);
+    padding: 6px 14px;
+    border-radius: 999px;
+    background: var(--ink);
+    color: #fff;
+    font-weight: 800;
+    font-size: 0.85rem;
+    text-align: center;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+    animation: pop-in 0.25s ease;
   }
   .under {
     width: 100%;

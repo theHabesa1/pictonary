@@ -23,7 +23,7 @@
 {/if}
 
 {#if !game.connected && (game.state || game.joining)}
-  <div class="offline" role="status">📡 Connection lost — reconnecting…</div>
+  <div class="offline" role="status">📡 Reconnecting… your spot is saved</div>
 {/if}
 
 <style>
@@ -43,8 +43,9 @@
   .offline {
     position: fixed;
     left: 50%;
-    bottom: 16px;
+    top: calc(env(safe-area-inset-top) + 10px);
     transform: translateX(-50%);
+    white-space: nowrap;
     background: var(--ink);
     color: #fff;
     padding: 10px 18px;

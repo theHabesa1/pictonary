@@ -12,7 +12,8 @@ const PORT = Number(process.env.PORT) || 3000;
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, { maxHttpBufferSize: 256 * 1024, pingTimeout: 30_000 });
+// Fairly quick pings so a dropped player shows as "away" within ~20s.
+const io = new Server(server, { maxHttpBufferSize: 256 * 1024, pingInterval: 10_000, pingTimeout: 12_000 });
 
 /** @type {Map<string, Room>} */
 const rooms = new Map();

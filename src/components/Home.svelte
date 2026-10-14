@@ -1,8 +1,11 @@
 <script>
   import { AVATARS } from '../../shared/constants.js';
-  import { createRoom, game, joinRoom, profile, saveProfile, urlCode } from '../lib/game.svelte.js';
+  import {
+    createRoom, game, joinAsNewPlayer, joinRoom, lastSeat, profile, saveProfile, takeOverSeat, urlCode,
+  } from '../lib/game.svelte.js';
   import Logo from './Logo.svelte';
 
+  const resume = urlCode ? null : lastSeat();
   let code = $state(urlCode ?? '');
   let busy = $state(false);
   let showJoin = $state(false);
@@ -43,7 +46,24 @@
   <Logo />
   <p class="tagline">Draw it. Guess it. Laugh about it. 🎉<br />Free online Pictionary for family &amp; friends.</p>
 
-  <section class="card panel">
+  {#if game.seatConflict}
+    <div class="card panel conflict" role="alertdialog" aria-labelledby="conflict-title">
+      <h2 id="conflict-title">👀 You're already in this game</h2>
+      <p>
+        You're playing as <b>{game.seatConflict.name}</b> in room <b>{game.seatConflict.code}</b>, probably in another tab or on
+        another device.
+      </p>
+      <button class="btn green big wide" onclick={takeOverSeat}>▶️ Continue here as {game.seatConflict.name}</button>
+      <button class="btn white wide" onclick={joinAsNewPlayer}>🙋 I'm someone else, join as a new player</button>
+    </div>
+  {/if}
+
+  <section class="card panel" class:hidden={game.seatConflict}>
+    {#if resume}
+      <button class="btn blue wide resume" disabled={busy} onclick={() => run(() => joinRoom(resume.code))}>
+        🎮 Jump back into room <b class="code">{resume.code}</b>
+      </button>
+    {/if}
     <div class="who">
       <button class="avatar-big" onclick={randomAvatar} title="Random avatar" aria-label="Pick a random avatar">
         <span>{profile.avatar}</span>
@@ -153,6 +173,28 @@
     display: flex;
     flex-direction: column;
     gap: 14px;
+  }
+  .hidden {
+    display: none;
+  }
+  .conflict {
+    text-align: center;
+    gap: 12px;
+  }
+  .conflict h2 {
+    font-size: 1.35rem;
+  }
+  .conflict p {
+    margin: 0;
+    font-weight: 600;
+    line-height: 1.45;
+    color: var(--ink-soft);
+  }
+  .conflict .btn {
+    white-space: normal;
+  }
+  .resume {
+    animation: pop-in 0.35s ease;
   }
   .who {
     display: flex;
