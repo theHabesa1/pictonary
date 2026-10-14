@@ -24,6 +24,7 @@
     `⏱️ ${s.settings.drawTime}s`,
     s.settings.hints ? `💡 ${s.settings.hints} hint${s.settings.hints > 1 ? 's' : ''}` : '💡 No hints',
     DIFF[s.settings.difficulty],
+    `📚 ${s.wordPool.toLocaleString()} words`,
   ]);
 
   let copied = $state(false);
@@ -134,7 +135,7 @@
       </div>
       <div class="settings-body">
         {#if !isHost}<p class="ro ro-mobile">Only {host?.name ?? 'the host'} can change these</p>{/if}
-        <Settings settings={s.settings} editable={isHost} />
+        <Settings settings={s.settings} editable={isHost} wordPool={s.wordPool} />
       </div>
     </section>
 

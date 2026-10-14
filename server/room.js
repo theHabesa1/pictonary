@@ -3,7 +3,7 @@ import {
   AVATARS, CANVAS_H, CANVAS_W, CHOOSE_TIME, DEFAULT_SETTINGS, DIFFICULTY_MULT, MAX_PLAYERS,
   REACTIONS, TEAMS, TURN_END_TIME, isGuessChar, sanitizeSettings,
 } from '../shared/constants.js';
-import { pickWords } from './words.js';
+import { pickWords, poolSize } from './words.js';
 
 export const uid = (bytes = 9) => crypto.randomBytes(bytes).toString('base64url');
 
@@ -87,7 +87,7 @@ export class Room {
     this.turn = null;
     this.turnCounter = 0;
     this.ops = [];
-    this.usedWords = new Set();
+    this.usedWords = new Set(); // every word offered in this room, across games — avoids repeats
     this.teamScores = TEAMS.map(() => 0);
     this.teamCursor = TEAMS.map(() => 0);
     this.chatLog = [];
@@ -278,7 +278,6 @@ export class Room {
     for (const p of this.players.values()) p.score = 0;
     this.teamScores = TEAMS.map(() => 0);
     this.teamCursor = TEAMS.map(() => 0);
-    this.usedWords.clear();
     this.round = 1;
     this.queue = this.buildQueue();
     this.gameOverReason = '';
@@ -326,12 +325,15 @@ export class Room {
     if (!drawer) return this.endGame();
 
     const now = Date.now();
+    const choices = pickWords(this.settings, this.usedWords, this.settings.wordChoices);
+    // Offered-but-not-chosen words count as seen too, so the same options don't keep coming back.
+    for (const c of choices) this.usedWords.add(c.word.toLowerCase());
     this.phase = 'choosing';
     this.turn = {
       id: ++this.turnCounter,
       drawerId: drawer.id,
       team: drawer.team,
-      choices: pickWords(this.settings, this.usedWords, this.settings.wordChoices),
+      choices,
       word: null,
       difficulty: null,
       startedAt: now,
@@ -718,6 +720,7 @@ export class Room {
       settings: this.settings,
       teamScores: this.teamScores,
       gameOverReason: this.gameOverReason,
+      wordPool: poolSize(this.settings),
       // Set while the game is paused waiting for disconnected players to come back.
       waitingUntil: this.shortSince ? this.shortSince + SHORT_HANDED_MS : null,
       players: [...this.players.values()]

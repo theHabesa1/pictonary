@@ -245,7 +245,25 @@ async function teamGame() {
   for (const p of ps) p.s.disconnect();
 }
 
+async function wordTest() {
+  // Big word bank, and no word is offered twice until the pool runs out.
+  const { pickWords, TOTAL_WORDS, poolSize } = await import('../server/words.js');
+  const { DEFAULT_SETTINGS } = await import('../shared/constants.js');
+  assert.ok(TOTAL_WORDS > 2000, `word bank has ${TOTAL_WORDS} words`);
+  const used = new Set();
+  for (let i = 0; i < 300; i++) {
+    for (const { word } of pickWords(DEFAULT_SETTINGS, used, 3)) {
+      const key = word.toLowerCase();
+      assert.ok(!used.has(key), `"${word}" was offered twice`);
+      used.add(key);
+    }
+  }
+  const animals = poolSize({ ...DEFAULT_SETTINGS, categories: ['animals'], difficulty: 'easy' });
+  console.log(`✓ words: ${TOTAL_WORDS} total, 900 offers with no repeats (easy animals: ${animals})`);
+}
+
 try {
+  await wordTest();
   await soloGame();
   await hintTest();
   await teamGame();

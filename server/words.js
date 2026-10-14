@@ -1,7 +1,9 @@
+import fs from 'node:fs';
 import { CATEGORY_META, parseCustomWords } from '../shared/constants.js';
 
-// Family-friendly word lists, grouped by category and difficulty.
-const WORDS = {
+// Hand-picked classics, grouped by category and difficulty. These are merged with the
+// generated word bank below and always keep the difficulty given here.
+const HANDPICKED = {
   animals: {
     easy: ['cat', 'dog', 'fish', 'bird', 'cow', 'pig', 'duck', 'frog', 'snake', 'lion', 'bear', 'horse', 'sheep', 'mouse', 'rabbit', 'owl', 'bee', 'spider', 'monkey', 'turtle', 'elephant', 'giraffe', 'chicken', 'snail', 'whale', 'shark', 'butterfly', 'ant', 'crab', 'zebra'],
     medium: ['penguin', 'kangaroo', 'octopus', 'dolphin', 'camel', 'crocodile', 'flamingo', 'peacock', 'squirrel', 'hedgehog', 'koala', 'panda', 'parrot', 'jellyfish', 'starfish', 'seahorse', 'ladybug', 'gorilla', 'rhinoceros', 'hippo', 'bat', 'deer', 'wolf', 'fox', 'lobster', 'caterpillar', 'dragonfly', 'goldfish', 'polar bear', 'tiger'],
@@ -51,6 +53,42 @@ const WORDS = {
 
 const DIFFS = ['easy', 'medium', 'hard'];
 
+// Thousands more drawable words generated from WordNet + SCOWL (see scripts/build-words.mjs).
+const GENERATED = JSON.parse(fs.readFileSync(new URL('./wordbank.json', import.meta.url), 'utf8'));
+
+/** category -> difficulty -> [word]; every word appears once across the whole bank. */
+const WORDS = {};
+{
+  const seen = new Set();
+  const addAll = (source) => {
+    for (const { id } of CATEGORY_META) {
+      for (const d of DIFFS) {
+        for (const w of source[id]?.[d] ?? []) {
+          const key = w.toLowerCase();
+          if (seen.has(key)) continue;
+          seen.add(key);
+          ((WORDS[id] ??= { easy: [], medium: [], hard: [] })[d]).push(w);
+        }
+      }
+    }
+  };
+  addAll(HANDPICKED);
+  addAll(GENERATED);
+}
+
+export const TOTAL_WORDS = Object.values(WORDS).reduce((n, c) => n + c.easy.length + c.medium.length + c.hard.length, 0);
+
+/** How many words the current settings can draw from (shown in the lobby). */
+export function poolSize(settings) {
+  const custom = parseCustomWords(settings.customWords).length;
+  if (settings.customOnly && custom) return custom;
+  const cats = settings.categories.length ? settings.categories : CATEGORY_META.map((c) => c.id);
+  const diffs = settings.difficulty === 'mixed' ? DIFFS : [settings.difficulty];
+  let n = custom;
+  for (const c of cats) for (const d of diffs) n += WORDS[c]?.[d]?.length ?? 0;
+  return n;
+}
+
 const rand = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
 function poolFor(categories, difficulty) {
@@ -62,7 +100,8 @@ function poolFor(categories, difficulty) {
 
 /**
  * Pick `count` word options for the drawer.
- * Returns [{ word, difficulty }]. `used` is a Set of lowercase words already played this game.
+ * Returns [{ word, difficulty }]. `used` is a Set of lowercase words this room has already
+ * seen (offered or played); they're only repeated once a pool runs out.
  */
 export function pickWords(settings, used, count) {
   const custom = parseCustomWords(settings.customWords);

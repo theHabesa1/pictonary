@@ -8,7 +8,8 @@
     "dev": "node server/index.js --dev",
     "build": "vite build",
     "start": "node server/index.js",
-    "test": "node scripts/smoke.js"
+    "test": "node scripts/smoke.js",
+    "words": "node scripts/build-words.mjs"
   },
   "engines": {
     "node": ">=20.19"
@@ -20,5 +21,10 @@
     "socket.io-client": "^4.8.4",
     "svelte": "^5.57.2",
     "vite": "^8.3.4"
+  },
+  "devDependencies": {
+    "naughty-words": "^1.2.0",
+    "wordlist-english": "^1.2.1",
+    "wordnet-db": "^3.1.14"
   }
 }

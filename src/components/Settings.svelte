@@ -2,7 +2,7 @@
   import { CATEGORY_META, DRAW_TIMES, TEAMS, parseCustomWords } from '../../shared/constants.js';
   import { send } from '../lib/game.svelte.js';
 
-  let { settings, editable } = $props();
+  let { settings, editable, wordPool = 0 } = $props();
 
   const update = (patch) => editable && send('settings:update', patch);
 
@@ -110,7 +110,10 @@
   </div>
 
   <div class="row full">
-    <span class="label">Word categories</span>
+    <span class="label">
+      Word categories
+      {#if wordPool}<small class="pool">📚 {wordPool.toLocaleString()} words in play</small>{/if}
+    </span>
     <div class="cats">
       {#each CATEGORY_META as c}
         {@const on = allCats || settings.categories.includes(c.id)}
@@ -166,6 +169,14 @@
     text-transform: none;
     letter-spacing: 0;
     font-weight: 500;
+  }
+  .label .pool {
+    margin-left: 6px;
+    padding: 1px 8px;
+    border-radius: 999px;
+    background: var(--green-soft);
+    color: #15803d;
+    font-weight: 800;
   }
   select.input {
     padding: 9px 10px;
