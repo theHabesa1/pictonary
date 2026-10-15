@@ -2,15 +2,19 @@
   import { tick } from 'svelte';
   import { REACTIONS, TEAMS } from '../../shared/constants.js';
   import { game, send } from '../lib/game.svelte.js';
+  import PowerBar from './PowerBar.svelte';
 
-  // compact: no header (lobby, phones). reactions: show the emoji button in the input row (phones).
-  let { compact = false, reactions = false } = $props();
+  // compact: no header (lobby, phones). reactions / cards: show the 😀 / 🎴 buttons in the
+  // input row (phones), which open a tray above the input.
+  let { compact = false, reactions = false, cards = false } = $props();
 
   let text = $state('');
-  let showReact = $state(false);
+  let tray = $state(null); // null | 'react' | 'cards'
   $effect(() => {
-    if (!reactions) showReact = false;
+    if ((tray === 'react' && !reactions) || (tray === 'cards' && !cards)) tray = null;
   });
+  const toggle = (name) => (tray = tray === name ? null : name);
+  const cardCount = $derived(Object.values(game.state?.cards ?? {}).reduce((a, b) => a + b, 0));
   let list;
   let stick = true;
 
@@ -70,22 +74,35 @@
       {/if}
     {/each}
   </ul>
-  {#if showReact}
+  {#if tray === 'react'}
     <div class="react-row">
       {#each REACTIONS as r}
         <button type="button" onclick={() => send('react', r)} aria-label="React {r}">{r}</button>
       {/each}
     </div>
+  {:else if tray === 'cards'}
+    <div class="card-row"><PowerBar compact /></div>
   {/if}
   <form class="send" onsubmit={submit}>
+    {#if cards}
+      <button
+        type="button"
+        class="react-toggle"
+        class:on={tray === 'cards'}
+        aria-label="Power-up cards"
+        aria-expanded={tray === 'cards'}
+        onclick={() => toggle('cards')}
+        >🎴{#if cardCount}<span class="badge">{cardCount}</span>{/if}</button
+      >
+    {/if}
     {#if reactions}
       <button
         type="button"
         class="react-toggle"
-        class:on={showReact}
+        class:on={tray === 'react'}
         aria-label="Reactions"
-        aria-expanded={showReact}
-        onclick={() => (showReact = !showReact)}>😀</button
+        aria-expanded={tray === 'react'}
+        onclick={() => toggle('react')}>😀</button
       >
     {/if}
     <input
@@ -213,9 +230,39 @@
     font-size: 1.25rem;
     padding: 0;
   }
+  .react-toggle {
+    position: relative;
+  }
   .react-toggle.on {
     border-color: var(--ink);
     background: var(--yellow);
+  }
+  .badge {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 4px;
+    border-radius: 999px;
+    background: var(--violet);
+    color: #fff;
+    font-size: 0.7rem;
+    font-weight: 900;
+    display: grid;
+    place-items: center;
+  }
+  .card-row {
+    padding: 6px 8px 0;
+    border-top: 2px solid var(--line);
+    animation: slide 0.15s ease;
+  }
+  .sys.power {
+    color: #5b21b6;
+    background: #ede9fe;
+    border-radius: 10px;
+    padding: 5px 8px;
+    animation: pop-in 0.35s ease;
   }
   .react-row {
     display: flex;
@@ -250,7 +297,8 @@
   .compact .send {
     padding: 6px;
   }
-  .compact .react-row + .send {
+  .compact .react-row + .send,
+  .compact .card-row + .send {
     border-top: none;
   }
   @keyframes slide {

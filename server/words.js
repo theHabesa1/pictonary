@@ -91,10 +91,18 @@ export function poolSize(settings) {
 
 const rand = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
+/** "🐾 Animals" — shown by the 🔍 Category Clue card. */
+export function categoryLabel(id) {
+  if (id === 'custom') return '✏️ Custom words';
+  const c = CATEGORY_META.find((x) => x.id === id);
+  return c ? `${c.emoji} ${c.label}` : '❓ Mystery';
+}
+
+/** [{ w: word, c: category }] for the chosen categories at one difficulty. */
 function poolFor(categories, difficulty) {
   const cats = categories.length ? categories : CATEGORY_META.map((c) => c.id);
   const out = [];
-  for (const c of cats) for (const w of WORDS[c]?.[difficulty] ?? []) out.push(w);
+  for (const c of cats) for (const w of WORDS[c]?.[difficulty] ?? []) out.push({ w, c });
   return out;
 }
 
@@ -109,22 +117,23 @@ export function pickWords(settings, used, count) {
   const taken = new Set();
 
   const take = (pool, difficulty) => {
-    let fresh = pool.filter((w) => !used.has(w.toLowerCase()) && !taken.has(w.toLowerCase()));
-    if (!fresh.length) fresh = pool.filter((w) => !taken.has(w.toLowerCase()));
+    let fresh = pool.filter((e) => !used.has(e.w.toLowerCase()) && !taken.has(e.w.toLowerCase()));
+    if (!fresh.length) fresh = pool.filter((e) => !taken.has(e.w.toLowerCase()));
     if (!fresh.length) return false;
-    const word = rand(fresh);
+    const { w: word, c: category } = rand(fresh);
     taken.add(word.toLowerCase());
-    picked.push({ word, difficulty });
+    picked.push({ word, difficulty, category });
     return true;
   };
+  const customPool = custom.map((w) => ({ w, c: 'custom' }));
 
   if (settings.customOnly && custom.length) {
-    for (let i = 0; i < count; i++) take(custom, 'custom');
+    for (let i = 0; i < count; i++) take(customPool, 'custom');
     return picked;
   }
 
   // Mix one custom word into the choices when the host added some.
-  if (custom.length && count > 1) take(custom, 'custom');
+  if (custom.length && count > 1) take(customPool, 'custom');
 
   while (picked.length < count) {
     const slot = picked.length;

@@ -4,16 +4,39 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { Server } from 'socket.io';
+import { userFromToken } from './accounts.js';
+import { apiRouter } from './api.js';
+import { initDb } from './db.js';
 import { Room } from './room.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+// Local secrets (e.g. DATABASE_URL) live in a git-ignored .env file; hosts set them directly.
+try {
+  process.loadEnvFile(path.join(root, '.env'));
+} catch {
+  /* no .env file — that's fine */
+}
 const dev = process.argv.includes('--dev');
 const PORT = Number(process.env.PORT) || 3000;
 
+const dbKind = await initDb();
+
 const app = express();
+app.set('trust proxy', 1); // behind Render's proxy: req.ip is the player's IP
 const server = http.createServer(app);
 // Fairly quick pings so a dropped player shows as "away" within ~20s.
 const io = new Server(server, { maxHttpBufferSize: 256 * 1024, pingInterval: 10_000, pingTimeout: 12_000 });
+
+// Signed-in players send their login token when connecting; guests send none.
+io.use(async (socket, next) => {
+  try {
+    socket.data.user = await userFromToken(socket.handshake.auth?.token);
+  } catch (err) {
+    console.error('[socket auth]', err);
+    socket.data.user = null;
+  }
+  next();
+});
 
 /** @type {Map<string, Room>} */
 const rooms = new Map();
@@ -31,11 +54,12 @@ io.on('connection', (socket) => {
   const room = () => rooms.get(socket.data.code);
   const pid = () => socket.data.pid;
 
-  // Wrap handlers so one bad message can never crash the server.
+  // Wrap handlers so one bad message can never crash the server (sync or async).
   const on = (event, fn) =>
     socket.on(event, (...args) => {
       try {
-        fn(...args);
+        const result = fn(...args);
+        if (result instanceof Promise) result.catch((err) => console.error(`[${event}]`, err));
       } catch (err) {
         console.error(`[${event}]`, err);
       }
@@ -78,6 +102,14 @@ io.on('connection', (socket) => {
   on('word:choose', (index) => room()?.chooseWord(pid(), index));
   on('chat', (text) => room()?.chat(pid(), text));
   on('react', (emoji) => room()?.react(pid(), emoji));
+  // Signed in or out without reconnecting: update who this socket belongs to.
+  on('auth', async (token, ack) => {
+    socket.data.user = token ? await userFromToken(token) : null;
+    room()?.linkAccount(pid(), socket.data.user);
+    reply(ack, { ok: !!socket.data.user });
+  });
+  on('power:use', (card) => room()?.usePower(pid(), card));
+  on('power:refresh', () => room()?.refreshCards(pid()));
 
   on('draw:op', (op) => room()?.drawOp(socket, pid(), op));
   on('draw:pts', (data) => room()?.drawPoints(socket, pid(), data));
@@ -108,6 +140,7 @@ setInterval(() => {
 }, 250);
 
 app.get('/health', (_req, res) => res.json({ ok: true, rooms: rooms.size }));
+app.use('/api', apiRouter());
 
 if (dev) {
   const { createServer } = await import('vite');
@@ -125,5 +158,5 @@ if (dev) {
 }
 
 server.listen(PORT, () => {
-  console.log(`🎨 Pictonary running at http://localhost:${PORT}${dev ? ' (dev mode)' : ''}`);
+  console.log(`🎨 Pictonary running at http://localhost:${PORT}${dev ? ' (dev mode)' : ''} · accounts in ${dbKind}`);
 });

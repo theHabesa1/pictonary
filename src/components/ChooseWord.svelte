@@ -30,6 +30,9 @@
       {/each}
     </div>
     <p class="auto">Auto-pick in <b>{seconds}s</b></p>
+    {#if s.settings.powerUps && s.cards?.reroll > 0 && !turn.cardPlayed && s.cardsLeft > 0}
+      <button class="reroll" onclick={() => send('power:use', 'reroll')}>🎲 Reroll words <span>×{s.cards.reroll}</span></button>
+    {/if}
   {:else}
     <div class="big-av">{drawer?.avatar ?? '🎨'}</div>
     <h2>{drawer?.name ?? 'Someone'} is picking a word…</h2>
@@ -122,6 +125,25 @@
     margin: 0;
     opacity: 0.8;
     font-weight: 700;
+  }
+  .reroll {
+    border: 2px solid #fff;
+    background: rgba(255, 255, 255, 0.15);
+    color: #fff;
+    border-radius: 999px;
+    padding: 6px 14px;
+    font-weight: 800;
+  }
+  .reroll:hover {
+    background: rgba(255, 255, 255, 0.3);
+  }
+  .reroll span {
+    background: #fff;
+    color: var(--ink);
+    border-radius: 999px;
+    padding: 0 6px;
+    margin-left: 4px;
+    font-size: 0.8rem;
   }
   .big-av {
     font-size: 4.5rem;

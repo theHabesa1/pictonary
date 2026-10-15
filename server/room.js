@@ -3,7 +3,9 @@ import {
   AVATARS, CANVAS_H, CANVAS_W, CHOOSE_TIME, DEFAULT_SETTINGS, DIFFICULTY_MULT, MAX_PLAYERS,
   REACTIONS, TEAMS, TURN_END_TIME, isGuessChar, sanitizeSettings,
 } from '../shared/constants.js';
-import { pickWords, poolSize } from './words.js';
+import { CARDS_PER_GAME, EXTRA_TIME_SECONDS, POWERUPS, SPLAT_MS } from '../shared/powerups.js';
+import { getInventory, recordGame, refundCard, useCard } from './accounts.js';
+import { categoryLabel, pickWords, poolSize } from './words.js';
 
 export const uid = (bytes = 9) => crypto.randomBytes(bytes).toString('base64url');
 
@@ -112,7 +114,12 @@ export class Room {
   }
 
   join(socket, { name, avatar, token, takeover = true }) {
+    const user = socket.data.user ?? null; // signed-in account, if any
     let p = token ? this.byToken.get(token) : null;
+    // A seat that belongs to a different account isn't yours.
+    if (p?.userId && p.userId !== user?.id) p = null;
+    // Signed in on another device: find your seat by account.
+    if (!p && user) p = [...this.players.values()].find((x) => x.userId === user.id) ?? null;
     if (p) {
       // Same person coming back (refresh, flaky wifi, reopened the link, new tab).
       const old = p.socketId && p.socketId !== socket.id ? this.io.sockets.sockets.get(p.socketId) : null;
@@ -152,11 +159,22 @@ export class Room {
         disconnectedAt: 0,
         chatTimes: [],
         lastReact: 0,
+        userId: null,
+        level: null,
+        cards: {}, // power-up inventory (signed-in players)
+        cardsUsed: 0, // cards played this game
+        correct: 0, // correct guesses this game
+        drawn: 0, // own drawings someone guessed this game
       };
       this.players.set(p.id, p);
       this.byToken.set(p.token, p);
       this.system(`${p.name} joined the room`, 'join');
     }
+    // Link (or unlink) the seat to the account the player is signed in with.
+    p.userId = user?.id ?? null;
+    p.level = user?.level ?? null;
+    if (!user) p.cards = {};
+    else this.refreshCards(p.id);
 
     socket.join(this.code);
     socket.data.code = this.code;
@@ -275,9 +293,10 @@ export class Room {
     }
     // Drop seats of people who are gone before a fresh game.
     for (const p of [...this.players.values()]) if (!p.connected) this.remove(p.id);
-    for (const p of this.players.values()) p.score = 0;
+    for (const p of this.players.values()) Object.assign(p, { score: 0, cardsUsed: 0, correct: 0, drawn: 0 });
     this.teamScores = TEAMS.map(() => 0);
     this.teamCursor = TEAMS.map(() => 0);
+    this.turnsPlayed = 0;
     this.round = 1;
     this.queue = this.buildQueue();
     this.gameOverReason = '';
@@ -345,6 +364,12 @@ export class Room {
       guessed: new Map(), // pid -> points earned by guessing
       gains: new Map(), // pid -> total points earned this turn
       reveal: null,
+      category: null,
+      // Power-up card effects for this turn:
+      cardUsers: new Set(), // players who already played a card this turn
+      peeks: new Map(), // pid -> Set of letter indexes revealed only to them (💡)
+      catPeek: new Set(), // players who can see the category (🔍)
+      doubles: new Set(), // players whose correct guess scores double (✌️)
     };
     this.broadcast();
   }
@@ -366,6 +391,7 @@ export class Room {
 
     t.word = choice.word;
     t.difficulty = choice.difficulty;
+    t.category = choice.category;
     t.startedAt = now;
     t.duration = duration;
     t.endsAt = now + duration * 1000;
@@ -405,13 +431,18 @@ export class Room {
       t.gains.set(who.id, (t.gains.get(who.id) ?? 0) + pts);
       if (this.settings.mode === 'teams') this.teamScores[who.team] += pts;
     };
+    // ✌️ Double Points card doubles the guesser's own points (not the drawer's share).
+    const boost = (pts) => (t.doubles.has(p.id) ? pts * 2 : pts);
+    p.correct++;
+    if (t.guessed.size === 0 && drawer) drawer.drawn++;
 
     if (this.settings.mode === 'teams') {
-      const pts = round5((100 + 300 * timeLeft) * mult);
+      const base = round5((100 + 300 * timeLeft) * mult);
+      const pts = boost(base);
       t.guessed.set(p.id, pts);
       award(p, pts);
       if (p.team === t.team || !this.drawerHasTeammates()) {
-        award(drawer, round5(pts * 0.5));
+        award(drawer, round5(base * 0.5));
         this.system(`🎉 ${p.name} got it for the ${TEAMS[p.team].name}! +${pts}`, 'correct');
         this.endTurn('guessed', p);
       } else {
@@ -422,11 +453,12 @@ export class Room {
     }
 
     const order = t.guessed.size;
-    const pts = round5((100 + 400 * timeLeft + ([60, 30, 15][order] ?? 0)) * mult);
+    const base = round5((100 + 400 * timeLeft + ([60, 30, 15][order] ?? 0)) * mult);
+    const pts = boost(base);
     t.guessed.set(p.id, pts);
     award(p, pts);
-    award(drawer, round5(pts * 0.35));
-    this.system(`🎉 ${p.name} guessed the word! +${pts}`, 'correct');
+    award(drawer, round5(base * 0.35));
+    this.system(`🎉 ${p.name} guessed the word! +${pts}${pts > base ? ' (✌️ doubled!)' : ''}`, 'correct');
     if (!this.checkAllGuessed()) this.broadcast();
   }
 
@@ -468,6 +500,7 @@ export class Room {
       by: by ? { id: by.id, name: by.name, team: by.team } : null,
       gains: [...t.gains.entries()].map(([id, pts]) => ({ id, pts })).sort((a, b) => b.pts - a.pts),
     };
+    if (t.word) this.turnsPlayed = (this.turnsPlayed ?? 0) + 1;
     this.phase = 'turnEnd';
     t.endsAt = Date.now() + (short ? 2500 : TURN_END_TIME * 1000);
     t.duration = short ? 2.5 : TURN_END_TIME;
@@ -490,6 +523,174 @@ export class Room {
     this.gameOverReason = reason;
     this.system(reason ? `🏁 Game over — ${reason}` : '🏁 Game over! Thanks for playing 🎉');
     this.broadcast();
+    // Stars are only paid for games that ran their full course (not ended early).
+    if (!reason && (this.turnsPlayed ?? 0) >= 2 && this.players.size >= 2) this.payout();
+  }
+
+  /** Save each signed-in player's result and pay out ⭐ stars. */
+  payout() {
+    const players = [...this.players.values()];
+    const teams = this.settings.mode === 'teams';
+    const best = teams ? Math.max(...this.teamScores) : Math.max(...players.map((p) => p.score));
+    for (const p of players) {
+      if (!p.userId) continue;
+      const mine = teams ? this.teamScores[p.team] : p.score;
+      const place = 1 + (teams ? this.teamScores.filter((s) => s > mine).length : players.filter((x) => x.score > mine).length);
+      const result = {
+        mode: this.settings.mode,
+        score: p.score,
+        place,
+        players: players.length,
+        won: best > 0 && mine === best,
+        correct: p.correct,
+        drawn: p.drawn,
+      };
+      recordGame(p.userId, result)
+        .then((rewards) => {
+          if (!rewards) return;
+          p.level = rewards.user.level;
+          if (p.socketId) this.io.to(p.socketId).emit('rewards', rewards);
+          this.broadcast();
+        })
+        .catch((err) => console.error('[payout]', err));
+    }
+  }
+
+  // ───────────────────────── power-up cards ─────────────────────────
+
+  /** A player signed in or out mid-room. */
+  linkAccount(pid, user) {
+    const p = this.players.get(pid);
+    if (!p) return;
+    p.userId = user?.id ?? null;
+    p.level = user?.level ?? null;
+    p.cards = {};
+    if (user) this.refreshCards(pid);
+    this.broadcast();
+  }
+
+  /** Reload a signed-in player's card inventory from the database. */
+  async refreshCards(pid) {
+    const p = this.players.get(pid);
+    if (!p?.userId) return;
+    try {
+      p.cards = await getInventory(p.userId);
+      this.broadcast();
+    } catch (err) {
+      console.error('[cards]', err);
+    }
+  }
+
+  /** Why `p` can't play `card` right now (null = they can). */
+  cardBlocker(p, card) {
+    const t = this.turn;
+    const def = POWERUPS[card];
+    const isDrawer = t?.drawerId === p.id;
+    if (!t) return 'Cards can only be played during a game.';
+    if (def.when === 'choosing') {
+      return this.phase === 'choosing' && isDrawer ? null : 'Play this while you pick your word.';
+    }
+    if (def.when === 'drawing') {
+      return this.phase === 'drawing' && isDrawer ? null : 'Play this while you are drawing.';
+    }
+    if (this.phase !== 'drawing' || isDrawer) return 'Play this while someone else is drawing.';
+    if (t.guessed.has(p.id)) return 'You already got this one!';
+    if (card !== 'splat' && !this.canGuess(p)) return "It's not your team's turn to guess.";
+    if (card === 'peek' && this.peekIndex(p) == null) return 'Not enough hidden letters left to peek at.';
+    if (card === 'category' && t.catPeek.has(p.id)) return 'You already know the category.';
+    return null;
+  }
+
+  async usePower(pid, card) {
+    const p = this.players.get(pid);
+    const def = POWERUPS[card];
+    const t = this.turn;
+    if (!p || !def) return;
+    const fail = (msg) => this.whisper(pid, `🎴 ${msg}`);
+    if (!this.settings.powerUps) return fail('Power-up cards are switched off in this room.');
+    if (!p.userId) return fail('Sign in to earn ⭐ stars and collect power-up cards!');
+    if (p.cardPending) return;
+    if (t?.cardUsers.has(pid)) return fail('One card per turn — save the rest for later!');
+    if (p.cardsUsed >= CARDS_PER_GAME) return fail(`You've played all ${CARDS_PER_GAME} of your cards for this game.`);
+    const blocker = this.cardBlocker(p, card);
+    if (blocker) return fail(blocker);
+
+    p.cardPending = true;
+    let left = null;
+    try {
+      left = await useCard(p.userId, card);
+    } catch (err) {
+      console.error('[cards]', err);
+      return fail("Couldn't play that card just now. Try again!");
+    } finally {
+      p.cardPending = false;
+    }
+    if (left === null) {
+      p.cards[card] = 0;
+      this.broadcast();
+      return fail(`You don't have any ${def.name} cards. Get some in the ⭐ shop!`);
+    }
+    // The game may have moved on while we were talking to the database.
+    const late = this.turn !== t ? 'Too late — that turn is over.' : this.cardBlocker(p, card);
+    if (late) {
+      refundCard(p.userId, card).catch((err) => console.error('[cards]', err));
+      return fail(`${late} (card refunded)`);
+    }
+    p.cards[card] = left;
+    p.cardsUsed++;
+    t.cardUsers.add(pid);
+    this.applyPower(p, card);
+  }
+
+  applyPower(p, card) {
+    const t = this.turn;
+    const def = POWERUPS[card];
+    this.system(`🎴 ${p.name} played ${def.emoji} ${def.name}!`, 'power');
+    switch (card) {
+      case 'category':
+        t.catPeek.add(p.id);
+        this.whisper(p.id, `🔍 The word is from: ${categoryLabel(t.category)}`);
+        break;
+      case 'peek': {
+        const idx = this.peekIndex(p);
+        if (!t.peeks.has(p.id)) t.peeks.set(p.id, new Set());
+        t.peeks.get(p.id).add(idx);
+        break;
+      }
+      case 'double':
+        t.doubles.add(p.id);
+        break;
+      case 'reroll':
+        t.choices = pickWords(this.settings, this.usedWords, this.settings.wordChoices);
+        for (const c of t.choices) this.usedWords.add(c.word.toLowerCase());
+        t.endsAt = Date.now() + CHOOSE_TIME * 1000;
+        t.duration = CHOOSE_TIME;
+        break;
+      case 'time':
+        t.endsAt += EXTRA_TIME_SECONDS * 1000;
+        t.duration += EXTRA_TIME_SECONDS;
+        break;
+      case 'splat':
+        // Everyone except you, the drawer and your own teammates gets ink on their screen.
+        for (const x of this.connectedPlayers()) {
+          if (x.id === p.id || x.id === t.drawerId) continue;
+          if (this.settings.mode === 'teams' && x.team === p.team) continue;
+          this.io.to(x.socketId).emit('splat', { by: p.name, ms: SPLAT_MS, seed: Math.random() });
+        }
+        break;
+    }
+    this.broadcast();
+  }
+
+  /** A random letter still hidden from `p` — keeping at least one letter hidden. */
+  peekIndex(p) {
+    const t = this.turn;
+    if (!t?.word) return null;
+    const mine = t.peeks.get(p.id);
+    const hidden = Array.from(t.word)
+      .map((c, i) => (isGuessChar(c) && !t.revealed.includes(i) && !mine?.has(i) ? i : -1))
+      .filter((i) => i >= 0);
+    return hidden.length >= 2 ? hidden[Math.floor(Math.random() * hidden.length)] : null;
   }
 
   backToLobby(pid) {
@@ -694,7 +895,8 @@ export class Room {
     let turn = null;
     if (t) {
       const knows = isDrawer || t.guessed.has(me.id) || this.phase === 'turnEnd';
-      const revealed = new Set(t.revealed);
+      // Letters revealed to everyone by hints, plus any this player peeked at with 💡.
+      const revealed = new Set([...t.revealed, ...(t.peeks.get(me.id) ?? [])]);
       turn = {
         id: t.id,
         drawerId: t.drawerId,
@@ -709,6 +911,10 @@ export class Room {
         hintsTotal: t.revealOrder.length,
         canGuess: this.canGuess(me),
         reveal: this.phase === 'turnEnd' ? t.reveal : null,
+        category: t.word && (t.catPeek.has(me.id) || knows) ? categoryLabel(t.category) : null,
+        peeked: t.peeks.get(me.id)?.size ?? 0,
+        doubled: t.doubles.has(me.id),
+        cardPlayed: t.cardUsers.has(me.id),
       };
     }
     return {
@@ -733,7 +939,11 @@ export class Room {
           score: p.score,
           connected: p.connected,
           guessed: !!t?.guessed.has(p.id),
+          level: p.level, // null for guests
         })),
+      // This player's power-up cards (null = guest, not signed in).
+      cards: me.userId ? me.cards : null,
+      cardsLeft: CARDS_PER_GAME - me.cardsUsed,
       turn,
       serverNow: Date.now(),
     };

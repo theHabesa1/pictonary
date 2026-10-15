@@ -1,6 +1,7 @@
 <script>
   import { MAX_PLAYERS, TEAMS } from '../../shared/constants.js';
   import { game, leaveRoom, send } from '../lib/game.svelte.js';
+  import AccountButton from './AccountButton.svelte';
   import Logo from './Logo.svelte';
   import Settings from './Settings.svelte';
   import Chat from './Chat.svelte';
@@ -49,7 +50,10 @@
 <div class="lobby">
   <header class="top">
     <Logo small />
-    <button class="btn white small" onclick={leaveRoom}>🚪 Leave</button>
+    <div class="top-right">
+      <AccountButton />
+      <button class="btn white small" onclick={leaveRoom}>🚪 Leave</button>
+    </div>
   </header>
 
   <section class="invite card">
@@ -76,6 +80,7 @@
         <li class="chip" class:away={!p.connected} class:me={p.id === s.me}>
           <span class="av">{p.avatar}</span>
           <span class="nm">{p.name}{p.id === s.me ? ' (you)' : ''}</span>
+          {#if p.level}<span class="lv" title="Level {p.level}">Lv {p.level}</span>{/if}
           {#if p.id === s.hostId}<span title="Host">👑</span>{/if}
           {#if !p.connected}<span class="tag">away</span>{/if}
           {#if isHost && p.id !== s.me}
@@ -168,6 +173,13 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 8px;
+  }
+  .top-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
   }
   .invite {
     display: flex;
@@ -274,6 +286,14 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  .lv {
+    background: var(--violet);
+    color: #fff;
+    border-radius: 6px;
+    padding: 0 5px;
+    font-size: 0.72rem;
+    flex: none;
   }
   .tag {
     font-size: 0.75rem;

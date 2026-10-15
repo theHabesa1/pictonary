@@ -10,3 +10,7 @@ services:
     envVars:
       - key: NODE_VERSION
         value: "22"
+      # Accounts, stars and cards need a database that survives restarts.
+      # Paste a free Neon Postgres connection string (https://neon.tech) when Render asks.
+      - key: DATABASE_URL
+        sync: false

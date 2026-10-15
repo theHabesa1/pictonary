@@ -58,6 +58,7 @@ export const DEFAULT_SETTINGS = {
   customWords: '',
   customOnly: false,
   allowSteals: true, // teams: other teams may guess and steal the points
+  powerUps: true, // signed-in players may play power-up cards
 };
 
 export const DRAW_TIMES = [30, 45, 60, 80, 100, 120, 150, 180];
@@ -86,6 +87,7 @@ export function sanitizeSettings(input, prev = DEFAULT_SETTINGS) {
   if (typeof input.customWords === 'string') s.customWords = input.customWords.slice(0, 5000);
   if ('customOnly' in input) s.customOnly = !!input.customOnly;
   if ('allowSteals' in input) s.allowSteals = !!input.allowSteals;
+  if ('powerUps' in input) s.powerUps = !!input.powerUps;
   return s;
 }
 

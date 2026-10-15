@@ -1,6 +1,6 @@
 # 🎨 Pictonary
 
-Free, real-time online Pictionary for family & friends. No sign-up: create a room, share the link, draw and guess.
+Free, real-time online Pictionary for family & friends. Create a room, share the link, draw and guess. Anyone can play as a guest; signing in adds levels, ⭐ stars and power-up cards.
 
 Built with **Svelte 5** + **Vite** on the front end and **Node + Socket.IO** for real-time multiplayer.
 
@@ -16,6 +16,28 @@ Built with **Svelte 5** + **Vite** on the front end and **Node + Socket.IO** for
 - 😂 Live emoji reactions, sound effects, a podium with confetti, and a team scoreboard.
 - 📱 Works on phones, tablets and desktop. If you refresh or your Wi-Fi drops, you rejoin with your points intact.
 - 👑 Host controls: settings, kick, skip turn, end game. If the host leaves, host passes to another player automatically.
+- 👤 **Accounts** (username + password, no email): your level, XP, wins, correct guesses, drawings guessed and recent games are all saved. There's also a top-players board, and you can delete your account at any time.
+- 🎴 **Power-up cards**, bought with ⭐ stars that are deliberately slow to earn. You can play 1 card per turn and 3 per game, and the host can switch cards off.
+
+## Stars & power-ups
+
+| Earn ⭐ | |
+|---|---|
+| Points | 1 ⭐ per 100 points scored in a game |
+| Win / podium | +5 ⭐ for 1st place or the winning team; +2 ⭐ for 2nd or 3rd |
+| Daily bonus | +5 ⭐ for your first finished game of the day |
+| Limits | Up to 60 ⭐ a day; only games played to the end count |
+
+| Card | When | Effect | Cost |
+|---|---|---|---|
+| 🔍 Category Clue | guessing | see the word's category | 20 ⭐ |
+| 🎲 Reroll | picking a word | new word choices | 25 ⭐ |
+| 💡 Letter Peek | guessing | one extra letter, only for you | 30 ⭐ |
+| ⏰ Extra Time | drawing | +20 seconds | 40 ⭐ |
+| 💦 Ink Splat | guessing | ink over your rivals' screens for 4 s | 45 ⭐ |
+| ✌️ Double Points | guessing | your correct guess scores 2× | 60 ⭐ |
+
+Tune the numbers in `shared/powerups.js`.
 
 ## Run locally
 
@@ -26,6 +48,8 @@ npm start          # http://localhost:3000
 ```
 
 For development with hot reload: `npm run dev`.
+
+Accounts are stored in an embedded Postgres ([PGlite](https://pglite.dev)) under `data/`, so there's nothing to set up. Set `DATABASE_URL` to use a real Postgres database instead.
 
 Run the multiplayer smoke test (with the server running): `npm test`.
 
@@ -43,19 +67,20 @@ The hand-picked lists in `server/words.js` are merged on top. To tweak the rules
 
 **Render** (free web service, supports WebSockets):
 
-1. Push this repo to GitHub.
+1. Create a free Postgres database on **[Neon](https://neon.tech)** (sign in with GitHub, then **New project**). Copy its connection string, which starts with `postgresql://…`.
 2. Open `https://render.com/deploy?repo=<your GitHub repo URL>`, or in the Render dashboard choose **New → Blueprint** and pick the repo.
-3. Render reads `render.yaml`, builds, and gives you a `https://….onrender.com` URL.
+3. When Render asks for `DATABASE_URL`, paste the Neon connection string. Render builds and gives you a `https://….onrender.com` URL.
 
-Free instances sleep after 15 minutes without visitors. The first visit after that takes about a minute to wake up.
+Free instances sleep after 15 minutes without visitors. The first visit after that takes about a minute to wake up. Without `DATABASE_URL` the game still works, but accounts are wiped whenever the server restarts.
 
 A `Dockerfile` is included for any container host (Koyeb, Fly.io, Railway, a VPS).
 
 ## Project layout
 
 ```
-server/   index.js (HTTP + Socket.IO), room.js (game engine), words.js (word lists)
-shared/   constants.js (settings, teams, palette, shared by client & server)
-src/      Svelte app: components/, lib/ (socket store, canvas engine, sounds)
-scripts/  smoke.js (end-to-end multiplayer test)
+server/   index.js (HTTP + Socket.IO), room.js (game engine), words.js (word lists),
+          db.js (Postgres / PGlite), accounts.js (accounts, stars, cards), api.js (REST API)
+shared/   constants.js (settings, teams, palette), powerups.js (cards & star economy)
+src/      Svelte app: components/, lib/ (socket & account stores, canvas engine, sounds)
+scripts/  smoke.js (end-to-end multiplayer test), build-words.mjs (word bank generator)
 ```

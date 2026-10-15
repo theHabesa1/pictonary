@@ -55,6 +55,21 @@ const SOUNDS = {
     { freq: 1047, at: 0.2, dur: 0.25, type: 'square', vol: 0.06 },
   ],
   reveal: [{ freq: 880, dur: 0.25, type: 'sine', to: 440, vol: 0.1 }],
+  splat: [
+    { freq: 220, dur: 0.25, type: 'sawtooth', to: 60, vol: 0.12 },
+    { freq: 900, at: 0.02, dur: 0.12, type: 'square', to: 200, vol: 0.05 },
+  ],
+  power: [
+    { freq: 523, dur: 0.08, type: 'triangle' },
+    { freq: 784, at: 0.07, dur: 0.08, type: 'triangle' },
+    { freq: 1175, at: 0.14, dur: 0.22, type: 'sine', vol: 0.1 },
+  ],
+  coins: [
+    { freq: 988, dur: 0.08, type: 'square', vol: 0.05 },
+    { freq: 1319, at: 0.08, dur: 0.25, type: 'square', vol: 0.05 },
+    { freq: 1568, at: 0.3, dur: 0.08, type: 'square', vol: 0.05 },
+    { freq: 2093, at: 0.38, dur: 0.3, type: 'square', vol: 0.05 },
+  ],
   fanfare: [
     { freq: 523, dur: 0.15, type: 'triangle' },
     { freq: 659, at: 0.15, dur: 0.15, type: 'triangle' },

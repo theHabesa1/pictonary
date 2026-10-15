@@ -3,9 +3,12 @@
   import Home from './components/Home.svelte';
   import Lobby from './components/Lobby.svelte';
   import Game from './components/Game.svelte';
+  import AccountModal from './components/AccountModal.svelte';
 
   const phase = $derived(game.state?.phase);
 </script>
+
+<AccountModal />
 
 {#if !game.state}
   {#if game.joining}

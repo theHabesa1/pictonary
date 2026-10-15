@@ -6,12 +6,14 @@ import { io } from 'socket.io-client';
 const URL = process.env.URL || 'http://localhost:3000';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-function player(name) {
-  const s = io(URL, { transports: ['websocket'], forceNew: true });
-  const p = { s, name, state: null, chat: [], ops: [] };
+function player(name, token) {
+  const s = io(URL, { transports: ['websocket'], forceNew: true, auth: { token } });
+  const p = { s, name, state: null, chat: [], ops: [], rewards: [], splats: 0 };
   s.on('state', (st) => (p.state = st));
   s.on('chat', (m) => p.chat.push(m));
   s.on('draw:op', (op) => p.ops.push(op));
+  s.on('rewards', (r) => p.rewards.push(r));
+  s.on('splat', () => p.splats++);
   p.emit = (ev, data) => new Promise((res) => s.emit(ev, data, res));
   p.until = async (fn, what, ms = 5000) => {
     const end = Date.now() + ms;
@@ -22,6 +24,93 @@ function player(name) {
     throw new Error(`${name}: timed out waiting for ${what}`);
   };
   return p;
+}
+
+async function api(path, { method = 'GET', body, token } = {}) {
+  const res = await fetch(`${URL}/api${path}`, {
+    method,
+    headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  return { status: res.status, ...(await res.json()) };
+}
+
+/** Play one short game: every drawer picks the first word and the other player guesses it. */
+async function playQuickGame(host, players) {
+  host.s.emit('game:start');
+  await host.until((s) => s.phase === 'choosing', 'game start');
+  for (let turn = 0; turn < 10; turn++) {
+    await host.until((s) => s.phase === 'choosing' || s.phase === 'gameOver', 'next turn', 10000);
+    if (host.state.phase === 'gameOver') return;
+    const drawer = players.find((p) => p.state.me === host.state.turn.drawerId);
+    await drawer.until((s) => s.turn?.choices, 'choices');
+    drawer.s.emit('word:choose', 0);
+    await drawer.until((s) => s.phase === 'drawing', 'drawing');
+    for (const p of players) if (p !== drawer) p.s.emit('chat', drawer.state.turn.word);
+    await host.until((s) => s.phase === 'turnEnd', 'turn end');
+  }
+  await host.until((s) => s.phase === 'gameOver', 'game over', 10000);
+}
+
+async function powerUpTest() {
+  // Accounts, the star economy and power-up cards, end to end.
+  const tag = Math.random().toString(36).slice(2, 7);
+  const regA = await api('/register', { method: 'POST', body: { username: `test_a_${tag}`, password: 'secret123' } });
+  const regB = await api('/register', { method: 'POST', body: { username: `test_b_${tag}`, password: 'secret123' } });
+  assert.ok(regA.token && regB.token, 'registered two accounts');
+  try {
+    assert.equal((await api('/shop/buy', { method: 'POST', body: { card: 'category' }, token: regA.token })).status, 400, 'no stars yet');
+
+    const a = player('A', regA.token);
+    const b = player('B', regB.token);
+    const { code } = await a.emit('room:create', { name: 'A' });
+    await b.emit('room:join', { code, name: 'B' });
+    a.s.emit('settings:update', { rounds: 1, difficulty: 'easy', hints: 0, drawTime: 60 });
+    await a.until((s) => s.players.length === 2 && s.settings.rounds === 1, 'settings');
+    assert.deepEqual(a.state.cards, {}, 'signed-in player has a card inventory');
+    assert.equal(a.state.players.find((p) => p.id === a.state.me).level, 1, 'level badge');
+
+    // Earn stars by finishing games.
+    await playQuickGame(a, [a, b]);
+    await a.until(() => a.rewards.length === 1, 'rewards after game 1');
+    const first = a.rewards[0];
+    assert.ok(first.parts.daily === 5 && first.stars >= 10, `first game pays points + daily bonus (got ${first.stars})`);
+    for (let g = 0; g < 3 && (await api('/me', { token: regA.token })).user.stars < 20; g++) await playQuickGame(a, [a, b]);
+    const me = await api('/me', { token: regA.token });
+    assert.ok(me.user.stars >= 20 && me.user.gamesPlayed >= 2 && me.history.length >= 2, 'stars, stats and history saved');
+
+    // Buy a card and play it.
+    const bought = await api('/shop/buy', { method: 'POST', body: { card: 'category' }, token: regA.token });
+    assert.equal(bought.inventory.category, 1, 'card bought');
+    assert.equal(bought.stars, me.user.stars - 20, 'stars spent');
+    a.s.emit('power:refresh');
+    await a.until((s) => s.cards?.category === 1, 'card shows in game');
+
+    a.s.emit('game:start');
+    await a.until((s) => s.phase === 'choosing', 'game start');
+    if (a.state.turn.drawerId === a.state.me) {
+      // A draws first: skip so B draws and A can guess.
+      a.s.emit('turn:skip');
+      await a.until((s) => s.phase === 'choosing' && s.turn.drawerId !== s.me, 'B draws', 10000);
+    }
+    await b.until((s) => s.turn?.choices, 'B choices');
+    b.s.emit('word:choose', 0);
+    await a.until((s) => s.phase === 'drawing', 'drawing');
+    assert.equal(a.state.turn.category, null, 'category hidden before the card');
+    a.s.emit('power:use', 'category');
+    await a.until((s) => s.turn.category && !(s.cards.category > 0), 'category revealed and card used');
+    a.s.emit('power:use', 'category');
+    await sleep(200);
+    assert.ok(a.chat.some((m) => m.type === 'private' && m.text.includes('One card per turn')), 'one card per turn');
+    assert.ok(b.chat.some((m) => m.type === 'power'), 'everyone sees the card being played');
+
+    assert.equal((await api('/me', { token: regA.token })).inventory.category, undefined, 'inventory updated in DB');
+    console.log(`✓ power-ups: stars earned (${first.stars} first game), card bought & played, limits enforced`);
+    for (const p of [a, b]) p.s.disconnect();
+  } finally {
+    await api('/me', { method: 'DELETE', token: regA.token });
+    await api('/me', { method: 'DELETE', token: regB.token });
+  }
 }
 
 async function soloGame() {
@@ -269,6 +358,7 @@ try {
   await teamGame();
   await dropoutTest();
   await drawerGraceTest();
+  await powerUpTest();
   console.log('\nAll smoke tests passed 🎉');
   process.exit(0);
 } catch (err) {

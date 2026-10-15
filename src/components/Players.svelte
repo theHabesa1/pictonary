@@ -33,7 +33,7 @@
     <span class="av">{p.avatar}</span>
     <span class="info">
       <span class="nm">{p.name}{p.id === s.me ? ' (you)' : ''}</span>
-      <span class="pts">{p.score} pts</span>
+      <span class="pts">{p.score} pts{#if p.level}<span class="lv">Lv {p.level}</span>{/if}</span>
     </span>
     <span class="badges">
       {#if p.id === drawerId}<span title="Drawing">✏️</span>{/if}
@@ -65,7 +65,7 @@
         <span class="mav">{p.avatar}</span>
         <span class="mtext">
           <span class="mname">{p.id === s.me ? 'You' : p.name}</span>
-          <span class="mscore">{p.score}</span>
+          <span class="mscore">{p.score}{#if p.level}<span class="lv">Lv{p.level}</span>{/if}</span>
         </span>
         {#if p.id === drawerId}<span class="mbadge">✏️</span>{:else if p.guessed}<span class="mbadge">✅</span>{/if}
       </div>
@@ -160,6 +160,19 @@
     font-size: 0.8rem;
     font-weight: 700;
     color: var(--muted);
+  }
+  .pts {
+    white-space: nowrap;
+  }
+  .lv {
+    white-space: nowrap;
+    margin-left: 5px;
+    background: var(--violet);
+    color: #fff;
+    border-radius: 5px;
+    padding: 0 4px;
+    font-size: 0.66rem;
+    vertical-align: 1px;
   }
   .badges {
     display: flex;

@@ -1,8 +1,14 @@
 import { io } from 'socket.io-client';
 import { AVATARS } from '../../shared/constants.js';
 import { setMuted, sfx } from './sound.js';
+import { getToken } from './token.js';
 
-export const socket = io({ reconnectionDelay: 500, reconnectionDelayMax: 3000 });
+// The login token is sent on every (re)connect so the server knows who's signed in.
+export const socket = io({
+  reconnectionDelay: 500,
+  reconnectionDelayMax: 3000,
+  auth: (cb) => cb({ token: getToken() }),
+});
 
 const PROFILE_KEY = 'pictonary.profile';
 const SESSION_KEY = 'pictonary.session';
@@ -47,6 +53,7 @@ export const game = $state({
   error: '',
   joining: false, // rejoining a saved seat
   seatConflict: null, // { code, name } when the saved seat is open in another tab/device
+  splat: null, // { by, until, seed } while someone's 💦 Ink Splat covers our board
   muted: load(MUTED_KEY, false),
 });
 setMuted(game.muted);
@@ -226,6 +233,15 @@ socket.on('chat', (msg) => {
   else if (msg.type === 'close') sfx('close');
   else if (msg.type === 'join') sfx('pop');
   else if (msg.type === 'leave') sfx('leave');
+  else if (msg.type === 'power') sfx('power');
+});
+
+socket.on('splat', ({ by, ms, seed }) => {
+  game.splat = { by, seed, until: Date.now() + ms };
+  sfx('splat');
+  setTimeout(() => {
+    if (game.splat?.seed === seed) game.splat = null;
+  }, ms);
 });
 
 let reactionId = 0;

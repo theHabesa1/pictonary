@@ -44,6 +44,8 @@
           {/if}
         </span>
         <span class="count">{lengths}</span>
+        {#if turn.category}<span class="clue" title="Category Clue card">{turn.category}</span>{/if}
+        {#if turn.doubled}<span class="clue dbl" title="Double Points card">✌️ 2×</span>{/if}
         {#if turn.hintsTotal > 0}
           <span class="bulbs" title="Letter hints revealed">
             {#each Array(turn.hintsTotal) as _, i}<span class:lit={i < turn.hintsGiven}>💡</span>{/each}
@@ -107,6 +109,19 @@
   }
   .bulbs {
     display: flex;
+  }
+  .clue {
+    background: #ede9fe;
+    color: #5b21b6;
+    border-radius: 6px;
+    padding: 0 6px;
+    text-transform: none;
+    letter-spacing: 0;
+    animation: pop-in 0.35s ease;
+  }
+  .clue.dbl {
+    background: #dcfce7;
+    color: #15803d;
   }
   .bulbs span {
     filter: grayscale(1) opacity(0.35);

@@ -3,7 +3,14 @@
   import {
     createRoom, game, joinAsNewPlayer, joinRoom, lastSeat, profile, saveProfile, takeOverSeat, urlCode,
   } from '../lib/game.svelte.js';
+  import { saveAccountProfile } from '../lib/account.svelte.js';
+  import AccountButton from './AccountButton.svelte';
   import Logo from './Logo.svelte';
+
+  const saveAll = () => {
+    saveProfile();
+    saveAccountProfile();
+  };
 
   const resume = urlCode ? null : lastSeat();
   let code = $state(urlCode ?? '');
@@ -38,11 +45,12 @@
 
   function randomAvatar() {
     profile.avatar = AVATARS[Math.floor(Math.random() * AVATARS.length)];
-    saveProfile();
+    saveAll();
   }
 </script>
 
 <main class="home">
+  <div class="account-corner"><AccountButton /></div>
   <Logo />
   <p class="tagline">Draw it. Guess it. Laugh about it. 🎉<br />Free online Pictionary for family &amp; friends.</p>
 
@@ -78,7 +86,7 @@
           placeholder="e.g. Grandma Sue"
           autocomplete="nickname"
           bind:value={profile.name}
-          onchange={saveProfile}
+          onchange={saveAll}
           onkeydown={(e) => e.key === 'Enter' && (urlCode ? join() : create())}
         />
       </div>
@@ -93,7 +101,7 @@
           aria-checked={a === profile.avatar}
           onclick={() => {
             profile.avatar = a;
-            saveProfile();
+            saveAll();
           }}>{a}</button
         >
       {/each}
@@ -176,6 +184,11 @@
   }
   .hidden {
     display: none;
+  }
+  .account-corner {
+    align-self: flex-end;
+    margin-bottom: -10px;
+    min-height: 34px;
   }
   .conflict {
     text-align: center;

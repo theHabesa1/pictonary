@@ -1,9 +1,18 @@
 <script>
   import { onMount } from 'svelte';
   import { TEAMS } from '../../shared/constants.js';
+  import { STARS } from '../../shared/powerups.js';
+  import { account, openAccount } from '../lib/account.svelte.js';
   import { leaveRoom, send } from '../lib/game.svelte.js';
+  import { sfx } from '../lib/sound.js';
 
   let { state: s, isHost } = $props();
+
+  // Stars arrive a moment after the game ends (saved to the database first).
+  const rw = $derived(account.rewards);
+  $effect(() => {
+    if (rw) setTimeout(() => sfx('coins'), 400);
+  });
 
   const ranked = $derived([...s.players].sort((a, b) => b.score - a.score));
   const teams = $derived(s.settings.mode === 'teams');
@@ -118,6 +127,26 @@
     {/if}
 
     {#if s.gameOverReason}<p class="reason">{s.gameOverReason}</p>{/if}
+
+    {#if rw}
+      <div class="rewards">
+        <div class="earned">+{rw.stars} ⭐</div>
+        <div class="parts">
+          {#if rw.parts.points}<span>🎯 {rw.parts.points} for points</span>{/if}
+          {#if rw.parts.win}<span>🏆 +{rw.parts.win} win</span>{/if}
+          {#if rw.parts.podium}<span>🥈 +{rw.parts.podium} podium</span>{/if}
+          {#if rw.parts.daily}<span>☀️ +{rw.parts.daily} daily bonus</span>{/if}
+        </div>
+        {#if rw.capped}<small>You hit today's limit of {STARS.dailyCap} ⭐ — more tomorrow!</small>{/if}
+        {#if rw.leveledUp}<div class="lvup">🎉 Level up! You're now <b>Level {rw.user.level}</b></div>{/if}
+        <button class="btn small white" onclick={() => openAccount('shop')}>🛒 Card shop · {rw.user.stars} ⭐</button>
+      </div>
+    {:else if !account.user && !account.checking}
+      <div class="rewards guest">
+        <span>⭐ Sign in to earn stars from every game and unlock power-up cards!</span>
+        <button class="btn small green" onclick={() => openAccount('signup')}>Create a free account</button>
+      </div>
+    {/if}
 
     <div class="actions">
       {#if isHost}
@@ -294,6 +323,53 @@
     margin: 0;
     font-weight: 700;
     color: var(--ink-soft);
+  }
+  .rewards {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 12px;
+    border: 3px solid #f5b400;
+    border-radius: 16px;
+    background: #fffbea;
+    animation: pop-in 0.4s ease;
+  }
+  .rewards.guest {
+    border-style: dashed;
+    font-weight: 800;
+  }
+  .earned {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 2rem;
+    color: #b45309;
+    -webkit-text-stroke: 1px var(--ink);
+    paint-order: stroke fill;
+    animation: bob 1.2s ease-in-out infinite;
+  }
+  .parts {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 5px;
+  }
+  .parts span {
+    background: #fff;
+    border: 2px solid var(--line);
+    border-radius: 999px;
+    padding: 2px 9px;
+    font-weight: 800;
+    font-size: 0.82rem;
+  }
+  .rewards small {
+    color: var(--muted);
+    font-weight: 700;
+  }
+  .lvup {
+    font-weight: 800;
+    color: var(--violet);
   }
   .actions {
     display: flex;

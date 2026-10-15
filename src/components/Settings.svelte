@@ -71,6 +71,20 @@
     </div>
   {/if}
 
+  <div class="row full">
+    <span class="label">Power-up cards</span>
+    <label class="toggle">
+      <input
+        type="checkbox"
+        checked={settings.powerUps}
+        disabled={!editable}
+        onchange={(e) => update({ powerUps: e.currentTarget.checked })}
+      />
+      <span class="track"></span>
+      <span class="toggle-text">🎴 Signed-in players can play cards they've earned with ⭐ stars</span>
+    </label>
+  </div>
+
   <div class="row">
     <label class="label" for="rounds">Rounds</label>
     <select id="rounds" class="input" value={settings.rounds} disabled={!editable} onchange={(e) => update({ rounds: +e.currentTarget.value })}>

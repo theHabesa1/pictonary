@@ -7,8 +7,11 @@
   import Chat from './Chat.svelte';
   import ChooseWord from './ChooseWord.svelte';
   import GameOver from './GameOver.svelte';
+  import { openAccount } from '../lib/account.svelte.js';
   import Players from './Players.svelte';
+  import PowerBar from './PowerBar.svelte';
   import Reactions from './Reactions.svelte';
+  import Splat from './Splat.svelte';
   import Timer from './Timer.svelte';
   import Toolbar from './Toolbar.svelte';
   import TurnEnd from './TurnEnd.svelte';
@@ -77,6 +80,7 @@
   });
 
   const inviteLink = $derived(`${location.origin}${location.pathname}?r=${s.code}`);
+  const showCards = $derived(s.settings.powerUps && (s.phase === 'drawing' || s.phase === 'choosing'));
 </script>
 
 <div class="game" class:phone class:drawer={canDraw} style:--vv-h="{vh}px" style:--vv-top="{vvTop}px">
@@ -121,6 +125,7 @@
             {#if isHost && s.phase !== 'gameOver'}
               <button role="menuitem" onclick={() => { if (confirm('End the game for everyone and go back to the lobby?')) send('game:lobby'); closeMenu(); }}>⏹️ End game</button>
             {/if}
+            <button role="menuitem" onclick={() => { openAccount(); closeMenu(); }}>⭐ My account &amp; card shop</button>
             <button role="menuitem" onclick={() => { navigator.clipboard?.writeText(inviteLink); closeMenu(); }}>🔗 Copy invite link</button>
             <button role="menuitem" class="danger" onclick={() => confirm('Leave this game?') && leaveRoom()}>🚪 Leave room</button>
           </div>
@@ -138,6 +143,9 @@
       <div class="board card" style:width="{boardW}px" style:height="{(boardW * 3) / 4}px">
         <Canvas {canDraw} />
         <Reactions />
+        {#if game.splat}
+          {#key game.splat.seed}<Splat {...game.splat} />{/key}
+        {/if}
         {#if s.waitingUntil}
           <div class="board-note" role="status">
             ⏳ Waiting for players to reconnect… ({Math.max(0, Math.ceil((s.waitingUntil - game.now) / 1000))}s)
@@ -161,11 +169,14 @@
           <Reactions buttons />
         </div>
       {/if}
+      {#if !phone && showCards}
+        <PowerBar />
+      {/if}
     </div>
   </main>
 
   <aside class="chat card">
-    <Chat compact={phone} reactions={phone && s.phase === 'drawing' && !isDrawer} />
+    <Chat compact={phone} reactions={phone && s.phase === 'drawing' && !isDrawer} cards={phone && showCards} />
   </aside>
 
   {#if s.phase === 'gameOver'}
@@ -348,6 +359,9 @@
   }
   .under {
     width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
   }
   .under:empty {
     display: none;
