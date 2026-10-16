@@ -1,10 +1,23 @@
 // End-to-end smoke test: simulates players over real sockets against a running server.
 // Usage: npm start (in another terminal), then: npm test
+// Against a deployed site: URL=https://your-site.onrender.com npm test
 import assert from 'node:assert/strict';
 import { io } from 'socket.io-client';
 
 const URL = process.env.URL || 'http://localhost:3000';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// A remote server needs longer than localhost before "this did NOT happen" checks are fair.
+const REMOTE = !/localhost|127\.0\.0\.1/.test(URL);
+const SETTLE = REMOTE ? 1500 : 150;
+
+async function waitFor(fn, what, ms = REMOTE ? 15000 : 5000) {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    if (fn()) return;
+    await sleep(25);
+  }
+  throw new Error(`timed out waiting for ${what}`);
+}
 
 function player(name, token) {
   const s = io(URL, { transports: ['websocket'], forceNew: true, auth: { token } });
@@ -15,7 +28,7 @@ function player(name, token) {
   s.on('rewards', (r) => p.rewards.push(r));
   s.on('splat', () => p.splats++);
   p.emit = (ev, data) => new Promise((res) => s.emit(ev, data, res));
-  p.until = async (fn, what, ms = 5000) => {
+  p.until = async (fn, what, ms = REMOTE ? 15000 : 5000) => {
     const end = Date.now() + ms;
     while (Date.now() < end) {
       if (p.state && fn(p.state)) return p.state;
@@ -100,9 +113,8 @@ async function powerUpTest() {
     a.s.emit('power:use', 'category');
     await a.until((s) => s.turn.category && !(s.cards.category > 0), 'category revealed and card used');
     a.s.emit('power:use', 'category');
-    await sleep(200);
-    assert.ok(a.chat.some((m) => m.type === 'private' && m.text.includes('One card per turn')), 'one card per turn');
-    assert.ok(b.chat.some((m) => m.type === 'power'), 'everyone sees the card being played');
+    await waitFor(() => a.chat.some((m) => m.type === 'private' && m.text.includes('One card per turn')), 'one card per turn');
+    await waitFor(() => b.chat.some((m) => m.type === 'power'), 'everyone sees the card being played');
 
     assert.equal((await api('/me', { token: regA.token })).inventory.category, undefined, 'inventory updated in DB');
     console.log(`✓ power-ups: stars earned (${first.stars} first game), card bought & played, limits enforced`);
@@ -143,11 +155,10 @@ async function soloGame() {
 
   // Drawing is relayed to others.
   drawer.s.emit('draw:op', { type: 'stroke', id: 'abc', color: '#ff0000', size: 12, points: [10, 10] });
-  await sleep(150);
-  assert.equal(g1.ops.length, 1, 'stroke relayed');
+  await waitFor(() => g1.ops.length === 1, 'stroke relayed');
   // Non-drawers can't draw.
   g1.s.emit('draw:op', { type: 'stroke', id: 'zzz', color: '#ff0000', size: 12, points: [10, 10] });
-  await sleep(150);
+  await sleep(SETTLE);
   assert.equal(drawer.ops.length, 0, 'guesser stroke rejected');
 
   // Wrong guess goes public, close guess gets a hint, right guess is hidden.
@@ -161,8 +172,8 @@ async function soloGame() {
 
   // Guessed player chat is private to knowers.
   g1.s.emit('chat', 'secret hello');
-  await sleep(150);
-  assert.ok(drawer.chat.some((m) => m.text === 'secret hello' && m.channel === 'guessed'), 'drawer sees secret chat');
+  await waitFor(() => drawer.chat.some((m) => m.text === 'secret hello' && m.channel === 'guessed'), 'drawer sees secret chat');
+  await sleep(SETTLE);
   assert.ok(!g2.chat.some((m) => m.text === 'secret hello'), 'g2 does not see secret chat');
 
   g2.s.emit('chat', word);
@@ -198,8 +209,7 @@ async function soloGame() {
   a2.s.on('kicked', (k) => (kicked = k));
   const moved = await a3.emit('room:join', { code, token, takeover: true });
   assert.equal(moved.id, created.id, 'seat moved to new device');
-  await sleep(150);
-  assert.equal(kicked?.takeover, true, 'old tab told the seat moved');
+  await waitFor(() => kicked?.takeover === true, 'old tab told the seat moved');
   console.log('✓ reconnect keeps seat; host kept during blip; seat takeover asks first');
   for (const p of [a2, a3, b, c]) p.s.disconnect();
 }
@@ -261,7 +271,7 @@ async function drawerGraceTest() {
   await drawer.until((s) => s.phase === 'drawing', 'drawing');
   const turnId = drawer.state.turn.id;
   drawer.s.emit('draw:op', { type: 'stroke', id: 'keep1', color: '#000000', size: 12, points: [100, 100] });
-  await sleep(150);
+  await sleep(SETTLE);
   drawer.s.disconnect();
   await sleep(2500);
   const watcher = ps[(di + 1) % 3];
@@ -274,8 +284,7 @@ async function drawerGraceTest() {
   const res = await back.emit('room:join', { code: created.code, token: tokens[di] });
   assert.equal(res.id, drawer.state.me);
   await back.until((s) => s.phase === 'drawing' && s.turn.word, 'drawer back mid-turn');
-  await sleep(150);
-  assert.ok(synced?.ops.some((o) => o.id === 'keep1'), 'drawing restored on return');
+  await waitFor(() => synced?.ops.some((o) => o.id === 'keep1'), 'drawing restored on return');
   console.log('✓ drawer grace: turn kept and drawing restored when the drawer comes back');
   for (const p of [...ps, back]) p.s.disconnect();
 }
@@ -323,9 +332,9 @@ async function teamGame() {
   const rival = ps.find((p) => p.state.players.find((x) => x.id === p.state.me).team !== team);
   assert.equal(rival.state.turn.canGuess, false, 'rival cannot guess with steals off');
   rival.s.emit('chat', word);
-  await sleep(200);
+  await waitFor(() => rival.chat.some((m) => m.type === 'private'), 'rival told to keep quiet');
+  await sleep(SETTLE);
   assert.equal(host.state.phase, 'drawing', 'rival correct guess ignored');
-  assert.ok(rival.chat.some((m) => m.type === 'private'), 'rival told to keep quiet');
   mate.s.emit('chat', word);
   await host.until((s) => s.phase === 'turnEnd', 'turn ends on teammate guess');
   assert.equal(host.state.turn.reveal.reason, 'guessed');

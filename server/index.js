@@ -139,8 +139,20 @@ setInterval(() => {
   }
 }, 250);
 
-app.get('/health', (_req, res) => res.json({ ok: true, rooms: rooms.size }));
+const startedAt = new Date();
+app.get('/health', (_req, res) =>
+  res.json({ ok: true, rooms: rooms.size, upSince: startedAt.toISOString(), uptimeMin: Math.round(process.uptime() / 60) }),
+);
 app.use('/api', apiRouter());
+
+// Render's free plan puts the server to sleep after 15 minutes without visitors. Visiting our
+// own public URL every 10 minutes keeps it awake (Render sets RENDER_EXTERNAL_URL for us).
+// Set KEEP_AWAKE=false to turn this off, or PUBLIC_URL to use it on another host.
+const publicUrl = process.env.RENDER_EXTERNAL_URL || process.env.PUBLIC_URL;
+if (publicUrl && process.env.KEEP_AWAKE !== 'false') {
+  setInterval(() => fetch(`${publicUrl}/health`).catch(() => {}), 10 * 60_000);
+  console.log(`⏰ Keep-awake: visiting ${publicUrl}/health every 10 minutes`);
+}
 
 if (dev) {
   const { createServer } = await import('vite');
