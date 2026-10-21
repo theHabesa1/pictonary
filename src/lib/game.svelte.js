@@ -53,7 +53,8 @@ export const game = $state({
   error: '',
   joining: false, // rejoining a saved seat
   seatConflict: null, // { code, name } when the saved seat is open in another tab/device
-  splat: null, // { by, until, seed } while someone's 💦 Ink Splat covers our board
+  splat: null, // { until, seed } while someone's (secret) 💦 Ink Splat covers our board
+  powerToast: null, // { ok, text } private feedback after playing a power-up card
   muted: load(MUTED_KEY, false),
 });
 setMuted(game.muted);
@@ -236,8 +237,17 @@ socket.on('chat', (msg) => {
   else if (msg.type === 'power') sfx('power');
 });
 
-socket.on('splat', ({ by, ms, seed }) => {
-  game.splat = { by, seed, until: Date.now() + ms };
+// Power-up cards are secret: feedback arrives privately, never through the chat.
+let toastTimer;
+socket.on('power:result', ({ ok, text }) => {
+  game.powerToast = { ok, text, id: Date.now() };
+  if (ok) sfx('power');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => (game.powerToast = null), 2800);
+});
+
+socket.on('splat', ({ ms, seed }) => {
+  game.splat = { seed, until: Date.now() + ms };
   sfx('splat');
   setTimeout(() => {
     if (game.splat?.seed === seed) game.splat = null;

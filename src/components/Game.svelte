@@ -146,6 +146,14 @@
         {#if game.splat}
           {#key game.splat.seed}<Splat {...game.splat} />{/key}
         {/if}
+        <!-- Private power-up feedback: only this player sees it (never the chat). -->
+        {#if game.powerToast}
+          {#key game.powerToast.id}
+            <div class="power-toast" class:bad={!game.powerToast.ok} role="status">
+              {game.powerToast.ok ? '🤫' : '🎴'} {game.powerToast.text}
+            </div>
+          {/key}
+        {/if}
         {#if s.waitingUntil}
           <div class="board-note" role="status">
             ⏳ Waiting for players to reconnect… ({Math.max(0, Math.ceil((s.waitingUntil - game.now) / 1000))}s)
@@ -338,6 +346,28 @@
     border-radius: 16px;
     background: #fff;
     container-type: size;
+  }
+  .power-toast {
+    position: absolute;
+    left: 50%;
+    bottom: 10px;
+    transform: translateX(-50%);
+    z-index: 8;
+    max-width: calc(100% - 16px);
+    width: max-content;
+    padding: 7px 14px;
+    border-radius: 999px;
+    border: 2px solid #fff;
+    background: #5b21b6;
+    color: #fff;
+    font-weight: 800;
+    font-size: 0.88rem;
+    text-align: center;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3);
+    animation: pop-in 0.25s ease;
+  }
+  .power-toast.bad {
+    background: var(--ink);
   }
   .board-note {
     position: absolute;

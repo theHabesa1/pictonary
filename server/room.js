@@ -478,7 +478,7 @@ export class Room {
     t.guessed.set(p.id, pts);
     award(p, pts);
     award(drawer, round5(base * 0.35));
-    this.system(`🎉 ${p.name} guessed the word! +${pts}${pts > base ? ' (✌️ doubled!)' : ''}`, 'correct');
+    this.system(`🎉 ${p.name} guessed the word! +${pts}`, 'correct');
     if (!this.checkAllGuessed()) this.broadcast();
   }
 
@@ -624,12 +624,21 @@ export class Room {
     return null;
   }
 
+  /**
+   * Power-up cards are secret: nothing about them ever goes into the chat. The player who
+   * played the card gets a private 'power:result' notice instead.
+   */
+  powerNotice(pid, ok, text) {
+    const sid = this.players.get(pid)?.socketId;
+    if (sid) this.io.to(sid).emit('power:result', { ok, text });
+  }
+
   async usePower(pid, card) {
     const p = this.players.get(pid);
     const def = POWERUPS[card];
     const t = this.turn;
     if (!p || !def) return;
-    const fail = (msg) => this.whisper(pid, `🎴 ${msg}`);
+    const fail = (msg) => this.powerNotice(pid, false, msg);
     if (!this.settings.powerUps) return fail('Power-up cards are switched off in this room.');
     if (!p.userId) return fail('Sign in to earn ⭐ stars and collect power-up cards!');
     if (p.cardPending) return;
@@ -668,11 +677,11 @@ export class Room {
   applyPower(p, card) {
     const t = this.turn;
     const def = POWERUPS[card];
-    this.system(`🎴 ${p.name} played ${def.emoji} ${def.name}!`, 'power');
+    // Secret: only the player who played it is told (never the chat, never other players).
+    this.powerNotice(p.id, true, `${def.emoji} ${def.name} played. Only you know!`);
     switch (card) {
       case 'category':
-        t.catPeek.add(p.id);
-        this.whisper(p.id, `🔍 The word is from: ${categoryLabel(t.category)}`);
+        t.catPeek.add(p.id); // shown in their word bar only
         break;
       case 'peek': {
         const idx = this.peekIndex(p);
@@ -698,7 +707,8 @@ export class Room {
         for (const x of this.connectedPlayers()) {
           if (x.id === p.id || x.id === t.drawerId) continue;
           if (this.settings.mode === 'teams' && x.team === p.team) continue;
-          this.io.to(x.socketId).emit('splat', { by: p.name, ms: SPLAT_MS, seed: Math.random() });
+          // Anonymous: victims never learn who splatted them.
+          this.io.to(x.socketId).emit('splat', { ms: SPLAT_MS, seed: Math.random() });
         }
         break;
     }
