@@ -1,6 +1,7 @@
 <script>
   // 💦 Ink Splat power-up: messy blobs over the board for a few seconds.
-  let { seed, by, until } = $props();
+  // Anonymous on purpose: you never learn who splatted you.
+  let { seed, until } = $props();
 
   // Small seeded random so each splat has its own shape.
   function rng(s) {
@@ -54,7 +55,7 @@
       {#each b.drops as d}<circle cx={d.x} cy={d.y} r={d.r} fill={b.color} />{/each}
     </svg>
   {/each}
-  <div class="who">💦 {by} splatted you!</div>
+  <div class="who">💦 You got splatted!</div>
 </div>
 
 <style>
