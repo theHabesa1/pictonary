@@ -22,7 +22,8 @@ async function waitFor(fn, what, ms = REMOTE ? 15000 : 5000) {
 
 function player(name, token) {
   const s = io(URL, { transports: ['websocket'], forceNew: true, auth: { token } });
-  const p = { s, name, state: null, chat: [], ops: [], rewards: [], splats: 0 };
+  const p = { s, name, state: null, chat: [], ops: [], rewards: [], splats: 0, notices: [] };
+  s.on('power:result', (n) => p.notices.push(n));
   s.on('state', (st) => (p.state = st));
   s.on('chat', (m) => p.chat.push(m));
   s.on('draw:op', (op) => p.ops.push(op));
@@ -114,11 +115,15 @@ async function powerUpTest() {
     a.s.emit('power:use', 'category');
     await a.until((s) => s.turn.category && !(s.cards.category > 0), 'category revealed and card used');
     a.s.emit('power:use', 'category');
-    await waitFor(() => a.chat.some((m) => m.type === 'private' && m.text.includes('One card per turn')), 'one card per turn');
-    await waitFor(() => b.chat.some((m) => m.type === 'power'), 'everyone sees the card being played');
+    await waitFor(() => a.notices.some((n) => !n.ok && n.text.includes('One card per turn')), 'one card per turn');
+    assert.ok(a.notices.some((n) => n.ok), 'player privately told the card worked');
+    // Power-ups are secret: nothing about them may ever appear in anyone's chat.
+    await sleep(SETTLE);
+    const leaks = [...a.chat, ...b.chat].filter((m) => m.type === 'power' || /🎴|Category Clue|power-up|card/i.test(m.text ?? ''));
+    assert.deepEqual(leaks, [], 'no power-up messages in the chat');
 
     assert.equal((await api('/me', { token: regA.token })).inventory.category, undefined, 'inventory updated in DB');
-    console.log(`✓ power-ups: stars earned (${first.stars} first game), card bought & played, limits enforced`);
+    console.log(`✓ power-ups: stars earned (${first.stars} first game), card bought & played in secret (nothing in chat), limits enforced`);
     for (const p of [a, b]) p.s.disconnect();
   } finally {
     await api('/me', { method: 'DELETE', token: regA.token });
