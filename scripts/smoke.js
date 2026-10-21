@@ -3,6 +3,7 @@
 // Against a deployed site: URL=https://your-site.onrender.com npm test
 import assert from 'node:assert/strict';
 import { io } from 'socket.io-client';
+import { canPlayCard } from '../shared/constants.js';
 
 const URL = process.env.URL || 'http://localhost:3000';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -157,6 +158,40 @@ async function imposterTest() {
   assert.equal(host.state.players.find((p) => p.id === imp.state.me).score, 200);
   await host.until((s) => s.phase === 'gameOver', 'game over', 30000);
   console.log('✓ imposter: secret roles, clues, voting, last-chance guess steals the win');
+  for (const p of ps) p.s.disconnect();
+}
+
+async function cardsTest() {
+  const ps = ['Mo', 'Nia', 'Oz'].map((n) => player(n));
+  const { code } = await ps[0].emit('room:create', { name: 'Mo' });
+  for (const p of ps.slice(1)) await p.emit('room:join', { code, name: p.name });
+  const host = ps[0];
+  host.s.emit('settings:update', { game: 'cards', rounds: 1, turnTime: 30, handSize: 7 });
+  await host.until((s) => s.settings.game === 'cards' && s.players.length === 3, 'card settings');
+  host.s.emit('game:start');
+  for (const p of ps) await p.until((s) => s.phase === 'cards' && s.clash?.hand?.length === 7, 'dealt 7 cards');
+  const ids = new Set(ps.flatMap((p) => p.state.clash.hand.map((c) => c.id)));
+  assert.equal(ids.size, 21, 'everyone has their own private hand');
+  assert.ok(/^\d$/.test(host.state.clash.pile.at(-1).value), 'pile starts on a number card');
+  assert.ok(host.state.clash.events.some((e) => e.type === 'deal'), 'deal is animated');
+
+  // Ten moves: whoever's turn it is plays a matching card, or draws.
+  for (let m = 0; m < 10 && host.state.phase === 'cards'; m++) {
+    const cur = ps.find((p) => p.state.me === host.state.clash.current);
+    const c = cur.state.clash;
+    const card = c.hand.find((x) => (!c.drawn || x.id === c.drawn) && canPlayCard(x, c.pile.at(-1), c.color, c.pending, c.stacking));
+    const last = host.state.clash.events.at(-1).id;
+    if (card) cur.s.emit('cards:play', { id: card.id, color: 'red' });
+    else if (c.drawn) cur.s.emit('cards:pass');
+    else cur.s.emit('cards:draw');
+    await host.until((s) => s.clash?.events.at(-1).id > last || s.clash?.current !== c.current, 'move registered');
+    await sleep(50);
+  }
+  const counts = Object.values(host.state.clash.counts).reduce((a, b) => a + b, 0);
+  assert.ok(counts >= 3, 'cards are tracked');
+  const others = ps[1].state.clash.events.filter((e) => e.type === 'draw' && e.pid !== ps[1].state.me);
+  assert.ok(others.every((e) => !e.cards), "you never see the cards other players draw");
+  console.log('✓ color clash: private hands, deal, matching plays, draws and turns');
   for (const p of ps) p.s.disconnect();
 }
 
@@ -403,6 +438,7 @@ try {
   await dropoutTest();
   await drawerGraceTest();
   await imposterTest();
+  await cardsTest();
   await powerUpTest();
   console.log('\nAll smoke tests passed 🎉');
   process.exit(0);

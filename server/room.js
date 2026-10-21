@@ -7,6 +7,7 @@ import { CARDS_PER_GAME, EXTRA_TIME_SECONDS, POWERUPS, SPLAT_MS } from '../share
 import { getInventory, recordGame, refundCard, useCard } from './accounts.js';
 import { categoryLabel, pickWords, poolSize } from './words.js';
 import { ImposterGame } from './imposter.js';
+import { CardGame } from './cards.js';
 
 export const uid = (bytes = 9) => crypto.randomBytes(bytes).toString('base64url');
 
@@ -214,8 +215,8 @@ export class Room {
   /** `left` = gone for good (Leave button / kicked); otherwise just disconnected. */
   afterPlayerGone(p, left) {
     this.ensureHost();
-    if (this.imp) {
-      this.imp.onPlayerGone(p, left);
+    if (this.engine) {
+      this.engine.onPlayerGone(p, left);
       this.broadcast();
       return;
     }
@@ -298,8 +299,14 @@ export class Room {
   start(pid) {
     if (pid !== this.hostId || this.inGame()) return;
     const min = this.minPlayers();
-    if (this.connectedPlayers().length < min) {
+    const max = gameInfo(this.settings.game).maxPlayers ?? MAX_PLAYERS;
+    const online = this.connectedPlayers().length;
+    if (online < min) {
       this.whisper(pid, `You need at least ${min} players to start. Share the invite link! 🔗`);
+      return;
+    }
+    if (online > max) {
+      this.whisper(pid, `${gameInfo(this.settings.game).name} is for up to ${max} players.`);
       return;
     }
     // Drop seats of people who are gone before a fresh game.
@@ -315,11 +322,18 @@ export class Room {
     if (this.settings.game === 'imposter') {
       this.turn = null;
       this.system(`🕵️ Imposter! ${rounds} — trust no one…`);
-      this.imp = new ImposterGame(this, normalize);
-      this.imp.start();
+      this.engine = new ImposterGame(this, normalize);
+      this.engine.start();
       return;
     }
-    this.imp = null;
+    if (this.settings.game === 'cards') {
+      this.turn = null;
+      this.system(`🃏 Color Clash! ${rounds} — first to empty their hand wins the round`);
+      this.engine = new CardGame(this);
+      this.engine.start();
+      return;
+    }
+    this.engine = null;
     this.queue = this.buildQueue();
     this.system(`🎨 Game on! ${rounds} — good luck!`);
     this.nextTurn();
@@ -542,8 +556,8 @@ export class Room {
     this.shortSince = 0;
     this.gameOverReason = reason;
     // Completed turns (Pictonary) or rounds (Imposter).
-    const played = this.imp ? this.imp.round - 1 : (this.turnsPlayed ?? 0);
-    this.imp = null;
+    const played = this.engine ? this.engine.round - 1 : (this.turnsPlayed ?? 0);
+    this.engine = null;
     this.system(reason ? `🏁 Game over — ${reason}` : '🏁 Game over! Thanks for playing 🎉');
     this.broadcast();
     // Stars are only paid for games that ran their full course (not ended early).
@@ -560,7 +574,7 @@ export class Room {
       const mine = teams ? this.teamScores[p.team] : p.score;
       const place = 1 + (teams ? this.teamScores.filter((s) => s > mine).length : players.filter((x) => x.score > mine).length);
       const result = {
-        mode: this.settings.game === 'imposter' ? 'imposter' : this.settings.mode,
+        mode: this.settings.game === 'pictionary' ? this.settings.mode : this.settings.game,
         score: p.score,
         place,
         players: players.length,
@@ -725,7 +739,7 @@ export class Room {
     this.queue = [];
     this.missed.clear();
     this.shortSince = 0;
-    this.imp = null;
+    this.engine = null;
     this.round = 0;
     for (const p of this.players.values()) p.score = 0;
     this.teamScores = TEAMS.map(() => 0);
@@ -754,7 +768,7 @@ export class Room {
     } else if (this.phase === 'turnEnd' && t && now >= t.endsAt && online >= 2) {
       this.nextTurn();
     }
-    this.imp?.tick(now);
+    this.engine?.tick(now);
 
     // Too few people online mid-game: pause between turns/rounds and give them time to reconnect.
     if (this.inGame() && online < this.minPlayers()) {
@@ -804,7 +818,7 @@ export class Room {
     const t = this.turn;
     const base = { id: uid(6), type: 'chat', pid: p.id, name: p.name, avatar: p.avatar, team: p.team, text: msg };
 
-    if (this.imp?.filterChat(p, msg)) return;
+    if (this.engine?.filterChat?.(p, msg)) return;
     if (this.phase === 'drawing' && t?.word) {
       // The drawer and people who already know the word talk in a private channel.
       if (p.id === t.drawerId || t.guessed.has(p.id)) {
@@ -953,7 +967,9 @@ export class Room {
       teamScores: this.teamScores,
       gameOverReason: this.gameOverReason,
       wordPool: poolSize(this.settings),
-      imp: this.imp ? this.imp.snapshot(me) : null, // Imposter round state (personal: role & word)
+      // Party-game state (personal: your role / your hand).
+      imp: this.engine?.kind === 'imposter' ? this.engine.snapshot(me) : null,
+      clash: this.engine?.kind === 'cards' ? this.engine.snapshot(me) : null,
       // Set while the game is paused waiting for disconnected players to come back.
       waitingUntil: this.shortSince ? this.shortSince + SHORT_HANDED_MS : null,
       players: [...this.players.values()]

@@ -4,6 +4,7 @@
   import Lobby from './components/Lobby.svelte';
   import Game from './components/Game.svelte';
   import ImposterGame from './components/ImposterGame.svelte';
+  import CardGame from './components/CardGame.svelte';
   import AccountModal from './components/AccountModal.svelte';
 
   const phase = $derived(game.state?.phase);
@@ -24,6 +25,8 @@
   <Lobby />
 {:else if game.state.settings.game === 'imposter'}
   <ImposterGame />
+{:else if game.state.settings.game === 'cards'}
+  <CardGame />
 {:else}
   <Game />
 {/if}

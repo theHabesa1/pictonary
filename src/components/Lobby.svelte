@@ -22,7 +22,15 @@
   const info = $derived(gameInfo(s.settings.game));
   const teamsOn = $derived(isTeams(s.settings));
   const summary = $derived(
-    s.settings.game === 'imposter'
+    s.settings.game === 'cards'
+      ? [
+          '🃏 Color Clash',
+          `🔁 ${s.settings.rounds} round${s.settings.rounds > 1 ? 's' : ''}`,
+          `🂠 ${s.settings.handSize} cards each`,
+          `⏱️ ${s.settings.turnTime}s per turn`,
+          s.settings.stacking ? '😈 Stacking on' : '🙂 No stacking',
+        ]
+      : s.settings.game === 'imposter'
       ? [
           '🕵️ Imposter',
           `🔁 ${s.settings.rounds} round${s.settings.rounds > 1 ? 's' : ''}`,

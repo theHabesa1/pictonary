@@ -109,9 +109,14 @@ io.on('connection', (socket) => {
     reply(ack, { ok: !!socket.data.user });
   });
   on('power:use', (card) => room()?.usePower(pid(), card));
-  on('imp:clue', (text) => room()?.imp?.submitClue(pid(), text));
-  on('imp:vote', (targetId) => room()?.imp?.vote(pid(), targetId));
-  on('imp:guess', (text) => room()?.imp?.imposterGuess(pid(), text));
+  on('imp:clue', (text) => room()?.engine?.submitClue?.(pid(), text));
+  on('imp:vote', (targetId) => room()?.engine?.vote?.(pid(), targetId));
+  on('imp:guess', (text) => room()?.engine?.imposterGuess?.(pid(), text));
+  on('cards:play', ({ id, color } = {}) => room()?.engine?.play?.(pid(), id, color));
+  on('cards:draw', () => room()?.engine?.draw?.(pid()));
+  on('cards:pass', () => room()?.engine?.pass?.(pid()));
+  on('cards:last', () => room()?.engine?.callLastCard?.(pid()));
+  on('cards:catch', (targetId) => room()?.engine?.catchPlayer?.(pid(), targetId));
   on('power:refresh', () => room()?.refreshCards(pid()));
 
   on('draw:op', (op) => room()?.drawOp(socket, pid(), op));

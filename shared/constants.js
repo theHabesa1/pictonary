@@ -62,7 +62,27 @@ export const GAMES = [
     desc: 'Everyone knows the secret word, except the imposter. Give clues, then vote out the faker!',
     minPlayers: 3,
   },
+  {
+    id: 'cards',
+    name: 'Color Clash',
+    emoji: '🃏',
+    desc: 'Match colors and numbers, hit friends with +2s, and be first to empty your hand!',
+    minPlayers: 2,
+    maxPlayers: 10,
+  },
 ];
+
+// 🃏 Color Clash cards.
+export const CARD_COLORS = ['red', 'yellow', 'green', 'blue'];
+export const CARD_HEX = { red: '#e5383b', yellow: '#f6b800', green: '#2ca54a', blue: '#1f7ae0', wild: '#1d1442' };
+/** Can `card` be played on `top` (current color `color`, `pending` stacked draws)? */
+export function canPlayCard(card, top, color, pending = 0, stacking = false) {
+  if (pending > 0) {
+    return stacking && ((top.value === 'draw2' && card.value === 'draw2') || (top.value === 'wild4' && card.value === 'wild4'));
+  }
+  return card.color === 'wild' || card.color === color || card.value === top.value;
+}
+export const cardPoints = (card) => (/^\d$/.test(card.value) ? Number(card.value) : card.color === 'wild' ? 50 : 20);
 export const gameInfo = (id) => GAMES.find((g) => g.id === id) ?? GAMES[0];
 /** Teams only apply to Pictonary. */
 export const isTeams = (settings) => settings.game !== 'imposter' && settings.mode === 'teams';
@@ -86,6 +106,10 @@ export const DEFAULT_SETTINGS = {
   clueTime: 30, // seconds per clue
   voteTime: 45, // seconds to discuss & vote
   imposters: 1, // 1 or 2 (2 needs at least 6 players)
+  // Color Clash:
+  turnTime: 30, // seconds per turn
+  handSize: 7, // cards dealt to each player
+  stacking: false, // house rule: answer a +2 with a +2 (or +4 with +4) to pass it on
 };
 
 export const DRAW_TIMES = [30, 45, 60, 80, 100, 120, 150, 180];
@@ -105,6 +129,9 @@ export function sanitizeSettings(input, prev = DEFAULT_SETTINGS) {
   if ('clueTime' in input) s.clueTime = clampInt(input.clueTime, 10, 90, prev.clueTime);
   if ('voteTime' in input) s.voteTime = clampInt(input.voteTime, 20, 120, prev.voteTime);
   if ('imposters' in input) s.imposters = clampInt(input.imposters, 1, 2, prev.imposters);
+  if ('turnTime' in input) s.turnTime = clampInt(input.turnTime, 10, 90, prev.turnTime);
+  if ('handSize' in input) s.handSize = clampInt(input.handSize, 5, 10, prev.handSize);
+  if ('stacking' in input) s.stacking = !!input.stacking;
   if ('teamCount' in input) s.teamCount = clampInt(input.teamCount, 2, TEAMS.length, prev.teamCount);
   if ('rounds' in input) s.rounds = clampInt(input.rounds, 1, 10, prev.rounds);
   if ('drawTime' in input) s.drawTime = clampInt(input.drawTime, 30, 240, prev.drawTime);

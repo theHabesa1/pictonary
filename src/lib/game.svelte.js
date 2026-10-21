@@ -1,3 +1,4 @@
+import { tick } from 'svelte';
 import { io } from 'socket.io-client';
 import { AVATARS } from '../../shared/constants.js';
 import { setMuted, sfx } from './sound.js';
@@ -216,11 +217,19 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && !socket.connected) socket.connect();
 });
 
+/**
+ * Components can watch room updates: `before(prev, next)` runs while the screen still shows the
+ * old state (to measure where things are), `after(prev, next)` once the screen has updated.
+ */
+export const stateHooks = new Set();
+
 socket.on('state', (s) => {
   game.offset = s.serverNow - Date.now();
   game.now = s.serverNow;
   const prev = game.state;
+  for (const h of stateHooks) h.before?.(prev, s);
   game.state = s;
+  if (stateHooks.size) tick().then(() => stateHooks.forEach((h) => h.after?.(prev, s)));
   playTransitionSounds(prev, s);
 });
 

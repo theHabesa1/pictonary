@@ -157,7 +157,7 @@
             <ul class="history">
               {#each account.history as g}
                 <li>
-                  <span>{g.mode === 'imposter' ? '🕵️' : g.mode === 'teams' ? '👨‍👩‍👧‍👦' : '🎨'} {placeLabel(g.place)} of {g.players}</span>
+                  <span>{g.mode === 'imposter' ? '🕵️' : g.mode === 'cards' ? '🃏' : g.mode === 'teams' ? '👨‍👩‍👧‍👦' : '🎨'} {placeLabel(g.place)} of {g.players}</span>
                   <span class="pts">{g.score} pts</span>
                   <span class="earned">+{g.stars} ⭐</span>
                   <small>{ago(g.playedAt)}</small>

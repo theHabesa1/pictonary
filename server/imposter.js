@@ -26,6 +26,7 @@ const shuffle = (arr) => {
 export class ImposterGame {
   /** @param {import('./room.js').Room} room */
   constructor(room, normalize) {
+    this.kind = 'imposter';
     this.room = room;
     this.normalize = normalize;
     this.round = 0;

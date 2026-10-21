@@ -28,6 +28,7 @@
   }
 
   const imposter = $derived(settings.game === 'imposter');
+  const cards = $derived(settings.game === 'cards');
 </script>
 
 <div class="settings" class:locked={!editable}>
@@ -69,6 +70,27 @@
         <button class:on={settings.imposters === 1} disabled={!editable} onclick={() => update({ imposters: 1 })}>🕵️ 1</button>
         <button class:on={settings.imposters === 2} disabled={!editable} onclick={() => update({ imposters: 2 })} title="Needs 6+ players">🕵️🕵️ 2 <small>(6+)</small></button>
       </div>
+    </div>
+  {:else if cards}
+    <div class="row">
+      <label class="label" for="turn-time">Time per turn</label>
+      <select id="turn-time" class="input" value={settings.turnTime} disabled={!editable} onchange={(e) => update({ turnTime: +e.currentTarget.value })}>
+        {#each [15, 20, 30, 45, 60] as t}<option value={t}>{t} seconds</option>{/each}
+      </select>
+    </div>
+    <div class="row">
+      <label class="label" for="hand-size">Cards each</label>
+      <select id="hand-size" class="input" value={settings.handSize} disabled={!editable} onchange={(e) => update({ handSize: +e.currentTarget.value })}>
+        {#each [5, 7, 10] as n}<option value={n}>{n} cards</option>{/each}
+      </select>
+    </div>
+    <div class="row full">
+      <span class="label">House rule</span>
+      <label class="toggle">
+        <input type="checkbox" checked={settings.stacking} disabled={!editable} onchange={(e) => update({ stacking: e.currentTarget.checked })} />
+        <span class="track"></span>
+        <span class="toggle-text">Stacking: answer a +2 with a +2 (or +4 with +4) to pass it on 😈</span>
+      </label>
     </div>
   {:else}
   <div class="row full">
@@ -135,7 +157,7 @@
     </select>
   </div>
 
-  {#if !imposter}
+  {#if !imposter && !cards}
   <div class="row">
     <label class="label" for="time">Draw time</label>
     <select id="time" class="input" value={settings.drawTime} disabled={!editable} onchange={(e) => update({ drawTime: +e.currentTarget.value })}>
@@ -159,6 +181,7 @@
   </div>
   {/if}
 
+  {#if !cards}
   <div class="row full">
     <span class="label">Difficulty</span>
     <div class="seg">
@@ -210,6 +233,7 @@
       </label>
     {/if}
   </div>
+  {/if}
 </div>
 
 <style>
@@ -298,6 +322,14 @@
   .mode b {
     font-family: var(--font-display);
     font-size: 1.1rem;
+  }
+  .seg.games {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  }
+  .games small {
+    font-size: 0.76rem;
+    line-height: 1.25;
   }
   .games button.on {
     background: #e9e3ff;
