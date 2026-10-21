@@ -46,7 +46,29 @@ export const CATEGORY_META = [
 
 export const DIFFICULTY_MULT = { easy: 1, medium: 1.25, hard: 1.5, custom: 1.25 };
 
+// Games a room can play. The host picks one in the lobby.
+export const GAMES = [
+  {
+    id: 'pictionary',
+    name: 'Pictonary',
+    emoji: '🎨',
+    desc: 'Draw the word, everyone else guesses it.',
+    minPlayers: 2,
+  },
+  {
+    id: 'imposter',
+    name: 'Imposter',
+    emoji: '🕵️',
+    desc: 'Everyone knows the secret word, except the imposter. Give clues, then vote out the faker!',
+    minPlayers: 3,
+  },
+];
+export const gameInfo = (id) => GAMES.find((g) => g.id === id) ?? GAMES[0];
+/** Teams only apply to Pictonary. */
+export const isTeams = (settings) => settings.game !== 'imposter' && settings.mode === 'teams';
+
 export const DEFAULT_SETTINGS = {
+  game: 'pictionary', // 'pictionary' | 'imposter'
   mode: 'solo', // 'solo' = everyone for themselves, 'teams'
   teamCount: 2,
   rounds: 3,
@@ -59,6 +81,11 @@ export const DEFAULT_SETTINGS = {
   customOnly: false,
   allowSteals: true, // teams: other teams may guess and steal the points
   powerUps: true, // signed-in players may play power-up cards
+  // Imposter:
+  clueRounds: 2, // how many times around the table everyone gives a clue
+  clueTime: 30, // seconds per clue
+  voteTime: 45, // seconds to discuss & vote
+  imposters: 1, // 1 or 2 (2 needs at least 6 players)
 };
 
 export const DRAW_TIMES = [30, 45, 60, 80, 100, 120, 150, 180];
@@ -72,7 +99,12 @@ const clampInt = (v, min, max, fallback) => {
 export function sanitizeSettings(input, prev = DEFAULT_SETTINGS) {
   const s = { ...prev };
   if (!input || typeof input !== 'object') return s;
+  if (GAMES.some((g) => g.id === input.game)) s.game = input.game;
   if (input.mode === 'solo' || input.mode === 'teams') s.mode = input.mode;
+  if ('clueRounds' in input) s.clueRounds = clampInt(input.clueRounds, 1, 3, prev.clueRounds);
+  if ('clueTime' in input) s.clueTime = clampInt(input.clueTime, 10, 90, prev.clueTime);
+  if ('voteTime' in input) s.voteTime = clampInt(input.voteTime, 20, 120, prev.voteTime);
+  if ('imposters' in input) s.imposters = clampInt(input.imposters, 1, 2, prev.imposters);
   if ('teamCount' in input) s.teamCount = clampInt(input.teamCount, 2, TEAMS.length, prev.teamCount);
   if ('rounds' in input) s.rounds = clampInt(input.rounds, 1, 10, prev.rounds);
   if ('drawTime' in input) s.drawTime = clampInt(input.drawTime, 30, 240, prev.drawTime);

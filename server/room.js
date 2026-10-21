@@ -1,11 +1,12 @@
 import crypto from 'node:crypto';
 import {
   AVATARS, CANVAS_H, CANVAS_W, CHOOSE_TIME, DEFAULT_SETTINGS, DIFFICULTY_MULT, MAX_PLAYERS,
-  REACTIONS, TEAMS, TURN_END_TIME, isGuessChar, sanitizeSettings,
+  REACTIONS, TEAMS, TURN_END_TIME, gameInfo, isGuessChar, isTeams, sanitizeSettings,
 } from '../shared/constants.js';
 import { CARDS_PER_GAME, EXTRA_TIME_SECONDS, POWERUPS, SPLAT_MS } from '../shared/powerups.js';
 import { getInventory, recordGame, refundCard, useCard } from './accounts.js';
 import { categoryLabel, pickWords, poolSize } from './words.js';
+import { ImposterGame } from './imposter.js';
 
 export const uid = (bytes = 9) => crypto.randomBytes(bytes).toString('base64url');
 
@@ -213,6 +214,11 @@ export class Room {
   /** `left` = gone for good (Leave button / kicked); otherwise just disconnected. */
   afterPlayerGone(p, left) {
     this.ensureHost();
+    if (this.imp) {
+      this.imp.onPlayerGone(p, left);
+      this.broadcast();
+      return;
+    }
     // A drawer who only lost connection gets DRAWER_GRACE_MS to come back (see tick).
     if (left && this.turn?.drawerId === p.id && (this.phase === 'choosing' || this.phase === 'drawing')) {
       this.endTurn('drawer_left');
@@ -238,7 +244,11 @@ export class Room {
   }
 
   inGame() {
-    return this.phase === 'choosing' || this.phase === 'drawing' || this.phase === 'turnEnd';
+    return this.phase !== 'lobby' && this.phase !== 'gameOver';
+  }
+
+  minPlayers() {
+    return gameInfo(this.settings.game).minPlayers;
   }
 
   // ───────────────────────── lobby actions ─────────────────────────
@@ -287,8 +297,9 @@ export class Room {
 
   start(pid) {
     if (pid !== this.hostId || this.inGame()) return;
-    if (this.connectedPlayers().length < 2) {
-      this.whisper(pid, 'You need at least 2 players to start. Share the invite link! 🔗');
+    const min = this.minPlayers();
+    if (this.connectedPlayers().length < min) {
+      this.whisper(pid, `You need at least ${min} players to start. Share the invite link! 🔗`);
       return;
     }
     // Drop seats of people who are gone before a fresh game.
@@ -298,10 +309,19 @@ export class Room {
     this.teamCursor = TEAMS.map(() => 0);
     this.turnsPlayed = 0;
     this.round = 1;
-    this.queue = this.buildQueue();
     this.gameOverReason = '';
     this.shortSince = 0;
-    this.system(`🎨 Game on! ${this.settings.rounds} round${this.settings.rounds > 1 ? 's' : ''} — good luck!`);
+    const rounds = `${this.settings.rounds} round${this.settings.rounds > 1 ? 's' : ''}`;
+    if (this.settings.game === 'imposter') {
+      this.turn = null;
+      this.system(`🕵️ Imposter! ${rounds} — trust no one…`);
+      this.imp = new ImposterGame(this, normalize);
+      this.imp.start();
+      return;
+    }
+    this.imp = null;
+    this.queue = this.buildQueue();
+    this.system(`🎨 Game on! ${rounds} — good luck!`);
     this.nextTurn();
   }
 
@@ -521,23 +541,26 @@ export class Room {
     this.missed.clear();
     this.shortSince = 0;
     this.gameOverReason = reason;
+    // Completed turns (Pictonary) or rounds (Imposter).
+    const played = this.imp ? this.imp.round - 1 : (this.turnsPlayed ?? 0);
+    this.imp = null;
     this.system(reason ? `🏁 Game over — ${reason}` : '🏁 Game over! Thanks for playing 🎉');
     this.broadcast();
     // Stars are only paid for games that ran their full course (not ended early).
-    if (!reason && (this.turnsPlayed ?? 0) >= 2 && this.players.size >= 2) this.payout();
+    if (!reason && played >= 2 && this.players.size >= 2) this.payout();
   }
 
   /** Save each signed-in player's result and pay out ⭐ stars. */
   payout() {
     const players = [...this.players.values()];
-    const teams = this.settings.mode === 'teams';
+    const teams = isTeams(this.settings);
     const best = teams ? Math.max(...this.teamScores) : Math.max(...players.map((p) => p.score));
     for (const p of players) {
       if (!p.userId) continue;
       const mine = teams ? this.teamScores[p.team] : p.score;
       const place = 1 + (teams ? this.teamScores.filter((s) => s > mine).length : players.filter((x) => x.score > mine).length);
       const result = {
-        mode: this.settings.mode,
+        mode: this.settings.game === 'imposter' ? 'imposter' : this.settings.mode,
         score: p.score,
         place,
         players: players.length,
@@ -702,6 +725,7 @@ export class Room {
     this.queue = [];
     this.missed.clear();
     this.shortSince = 0;
+    this.imp = null;
     this.round = 0;
     for (const p of this.players.values()) p.score = 0;
     this.teamScores = TEAMS.map(() => 0);
@@ -730,9 +754,10 @@ export class Room {
     } else if (this.phase === 'turnEnd' && t && now >= t.endsAt && online >= 2) {
       this.nextTurn();
     }
+    this.imp?.tick(now);
 
-    // Fewer than 2 people online mid-game: pause between turns and give them time to reconnect.
-    if (this.inGame() && online < 2) {
+    // Too few people online mid-game: pause between turns/rounds and give them time to reconnect.
+    if (this.inGame() && online < this.minPlayers()) {
       if (!this.shortSince) {
         this.shortSince = now;
         this.broadcast();
@@ -779,6 +804,7 @@ export class Room {
     const t = this.turn;
     const base = { id: uid(6), type: 'chat', pid: p.id, name: p.name, avatar: p.avatar, team: p.team, text: msg };
 
+    if (this.imp?.filterChat(p, msg)) return;
     if (this.phase === 'drawing' && t?.word) {
       // The drawer and people who already know the word talk in a private channel.
       if (p.id === t.drawerId || t.guessed.has(p.id)) {
@@ -927,6 +953,7 @@ export class Room {
       teamScores: this.teamScores,
       gameOverReason: this.gameOverReason,
       wordPool: poolSize(this.settings),
+      imp: this.imp ? this.imp.snapshot(me) : null, // Imposter round state (personal: role & word)
       // Set while the game is paused waiting for disconnected players to come back.
       waitingUntil: this.shortSince ? this.shortSince + SHORT_HANDED_MS : null,
       players: [...this.players.values()]

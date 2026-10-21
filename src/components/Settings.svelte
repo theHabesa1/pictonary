@@ -1,5 +1,5 @@
 <script>
-  import { CATEGORY_META, DRAW_TIMES, TEAMS, parseCustomWords } from '../../shared/constants.js';
+  import { CATEGORY_META, DRAW_TIMES, GAMES, TEAMS, parseCustomWords } from '../../shared/constants.js';
   import { send } from '../lib/game.svelte.js';
 
   let { settings, editable, wordPool = 0 } = $props();
@@ -26,9 +26,51 @@
     if (!next.length) next = [id === CATEGORY_META[0].id ? CATEGORY_META[1].id : CATEGORY_META[0].id];
     update({ categories: next });
   }
+
+  const imposter = $derived(settings.game === 'imposter');
 </script>
 
 <div class="settings" class:locked={!editable}>
+  <div class="row full">
+    <span class="label">Game</span>
+    <div class="seg games">
+      {#each GAMES as g}
+        <button class:on={settings.game === g.id} disabled={!editable} onclick={() => update({ game: g.id })}>
+          <span>{g.emoji}</span>
+          <b>{g.name}</b>
+          <small>{g.desc}</small>
+        </button>
+      {/each}
+    </div>
+  </div>
+
+  {#if imposter}
+    <div class="row">
+      <label class="label" for="clue-rounds">Clue rounds</label>
+      <select id="clue-rounds" class="input" value={settings.clueRounds} disabled={!editable} onchange={(e) => update({ clueRounds: +e.currentTarget.value })}>
+        {#each [1, 2, 3] as n}<option value={n}>{n} clue{n > 1 ? 's' : ''} each</option>{/each}
+      </select>
+    </div>
+    <div class="row">
+      <label class="label" for="clue-time">Time per clue</label>
+      <select id="clue-time" class="input" value={settings.clueTime} disabled={!editable} onchange={(e) => update({ clueTime: +e.currentTarget.value })}>
+        {#each [15, 20, 30, 45, 60] as t}<option value={t}>{t} seconds</option>{/each}
+      </select>
+    </div>
+    <div class="row">
+      <label class="label" for="vote-time">Voting time</label>
+      <select id="vote-time" class="input" value={settings.voteTime} disabled={!editable} onchange={(e) => update({ voteTime: +e.currentTarget.value })}>
+        {#each [30, 45, 60, 90, 120] as t}<option value={t}>{t} seconds</option>{/each}
+      </select>
+    </div>
+    <div class="row">
+      <span class="label">Imposters</span>
+      <div class="seg">
+        <button class:on={settings.imposters === 1} disabled={!editable} onclick={() => update({ imposters: 1 })}>🕵️ 1</button>
+        <button class:on={settings.imposters === 2} disabled={!editable} onclick={() => update({ imposters: 2 })} title="Needs 6+ players">🕵️🕵️ 2 <small>(6+)</small></button>
+      </div>
+    </div>
+  {:else}
   <div class="row full">
     <span class="label">Game mode</span>
     <div class="seg mode">
@@ -84,6 +126,7 @@
       <span class="toggle-text">🎴 Signed-in players can play cards they've earned with ⭐ stars</span>
     </label>
   </div>
+  {/if}
 
   <div class="row">
     <label class="label" for="rounds">Rounds</label>
@@ -92,6 +135,7 @@
     </select>
   </div>
 
+  {#if !imposter}
   <div class="row">
     <label class="label" for="time">Draw time</label>
     <select id="time" class="input" value={settings.drawTime} disabled={!editable} onchange={(e) => update({ drawTime: +e.currentTarget.value })}>
@@ -113,6 +157,7 @@
       {#each [1, 2, 3, 4, 5] as n}<option value={n}>{n} word{n > 1 ? 's' : ''}</option>{/each}
     </select>
   </div>
+  {/if}
 
   <div class="row full">
     <span class="label">Difficulty</span>
@@ -235,6 +280,7 @@
   .seg button:disabled {
     cursor: default;
   }
+  .games button,
   .mode button {
     display: grid;
     grid-template-columns: auto 1fr;
@@ -243,14 +289,22 @@
     align-items: center;
     padding: 10px 12px;
   }
+  .games span,
   .mode span {
     grid-row: span 2;
     font-size: 1.8rem;
   }
+  .games b,
   .mode b {
     font-family: var(--font-display);
     font-size: 1.1rem;
   }
+  .games button.on {
+    background: #e9e3ff;
+    border-color: var(--violet);
+    box-shadow: inset 0 -3px 0 rgba(91, 61, 245, 0.25);
+  }
+  .games small,
   .mode small {
     font-weight: 600;
     color: var(--ink-soft);

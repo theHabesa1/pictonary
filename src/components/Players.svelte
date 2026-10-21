@@ -1,6 +1,6 @@
 <script>
   import { flip } from 'svelte/animate';
-  import { TEAMS } from '../../shared/constants.js';
+  import { TEAMS, isTeams } from '../../shared/constants.js';
 
   // `strip` = one compact, horizontally scrollable row (phones).
   let { state: s, strip = false } = $props();
@@ -46,7 +46,7 @@
 
 {#if strip}
   <div class="strip" role="list" aria-label="Scores">
-    {#if s.settings.mode === 'teams'}
+    {#if isTeams(s.settings)}
       {#each teams as t (t.id)}
         <span class="tscore" style:--team={t.color} role="listitem" title={t.name}>{t.emoji} {t.score}</span>
       {/each}
@@ -59,7 +59,7 @@
         class:guessed={p.guessed}
         class:away={!p.connected}
         class:me={p.id === s.me}
-        style:--team={s.settings.mode === 'teams' ? TEAMS[p.team]?.color : null}
+        style:--team={isTeams(s.settings) ? TEAMS[p.team]?.color : null}
         animate:flip={{ duration: 300 }}
       >
         <span class="mav">{p.avatar}</span>
@@ -71,7 +71,7 @@
       </div>
     {/each}
   </div>
-{:else if s.settings.mode === 'teams'}
+{:else if isTeams(s.settings)}
   <div class="teams">
     {#each teams as t, i (t.id)}
       <section class="team" style:--team={t.color} animate:flip={{ duration: 400 }}>

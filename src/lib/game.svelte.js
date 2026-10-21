@@ -261,6 +261,16 @@ function playTransitionSounds(prev, s) {
   if (!prev) return;
   const me = s.me;
   if (s.phase === 'gameOver' && prev.phase !== 'gameOver') return sfx('fanfare');
+  // 🕵️ Imposter
+  if (s.imp) {
+    if (s.imp.current === me && prev.imp?.current !== me) return sfx('yourTurn');
+    if (s.phase === prev.phase) return;
+    if (s.phase === 'clues' && prev.phase !== 'clues') return sfx('start');
+    if (s.phase === 'vote') return sfx('hint');
+    if (s.phase === 'guess') return sfx('close');
+    if (s.phase === 'impReveal') return sfx(s.imp.reveal?.outcome === 'caught' ? 'correct' : 'reveal');
+    return;
+  }
   if (s.phase === 'turnEnd' && prev.phase !== 'turnEnd') return sfx('reveal');
   if (s.turn && s.turn.id !== prev.turn?.id) return sfx(s.turn.drawerId === me ? 'yourTurn' : 'pop');
   if (s.phase === 'drawing' && prev.phase === 'choosing') return sfx('start');

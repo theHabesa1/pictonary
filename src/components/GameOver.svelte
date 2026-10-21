@@ -1,6 +1,6 @@
 <script>
   import { onMount } from 'svelte';
-  import { TEAMS } from '../../shared/constants.js';
+  import { TEAMS, isTeams } from '../../shared/constants.js';
   import { STARS } from '../../shared/powerups.js';
   import { account, openAccount } from '../lib/account.svelte.js';
   import { leaveRoom, send } from '../lib/game.svelte.js';
@@ -15,7 +15,7 @@
   });
 
   const ranked = $derived([...s.players].sort((a, b) => b.score - a.score));
-  const teams = $derived(s.settings.mode === 'teams');
+  const teams = $derived(isTeams(s.settings));
   const teamRank = $derived(
     TEAMS.slice(0, s.settings.teamCount)
       .map((t) => ({ ...t, score: s.teamScores[t.id] ?? 0, members: ranked.filter((p) => p.team === t.id) }))

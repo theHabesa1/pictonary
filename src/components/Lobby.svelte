@@ -1,5 +1,5 @@
 <script>
-  import { MAX_PLAYERS, TEAMS } from '../../shared/constants.js';
+  import { MAX_PLAYERS, TEAMS, gameInfo, isTeams } from '../../shared/constants.js';
   import { game, leaveRoom, send } from '../lib/game.svelte.js';
   import AccountButton from './AccountButton.svelte';
   import Logo from './Logo.svelte';
@@ -19,14 +19,27 @@
   // On phones the settings collapse into a one-line summary.
   let settingsOpen = $state(false);
   const DIFF = { easy: '🟢 Easy', medium: '🟡 Medium', hard: '🔴 Hard', mixed: '🎲 Mixed' };
-  const summary = $derived([
-    s.settings.mode === 'teams' ? `👨‍👩‍👧‍👦 ${s.settings.teamCount} teams` : '🙋 Every player',
-    `🔁 ${s.settings.rounds} round${s.settings.rounds > 1 ? 's' : ''}`,
-    `⏱️ ${s.settings.drawTime}s`,
-    s.settings.hints ? `💡 ${s.settings.hints} hint${s.settings.hints > 1 ? 's' : ''}` : '💡 No hints',
-    DIFF[s.settings.difficulty],
-    `📚 ${s.wordPool.toLocaleString()} words`,
-  ]);
+  const info = $derived(gameInfo(s.settings.game));
+  const teamsOn = $derived(isTeams(s.settings));
+  const summary = $derived(
+    s.settings.game === 'imposter'
+      ? [
+          '🕵️ Imposter',
+          `🔁 ${s.settings.rounds} round${s.settings.rounds > 1 ? 's' : ''}`,
+          `💬 ${s.settings.clueRounds} clue${s.settings.clueRounds > 1 ? 's' : ''} each`,
+          `⏱️ ${s.settings.clueTime}s per clue`,
+          DIFF[s.settings.difficulty],
+        ]
+      : [
+          teamsOn ? `👨‍👩‍👧‍👦 ${s.settings.teamCount} teams` : '🙋 Every player',
+          `🔁 ${s.settings.rounds} round${s.settings.rounds > 1 ? 's' : ''}`,
+          `⏱️ ${s.settings.drawTime}s`,
+          s.settings.hints ? `💡 ${s.settings.hints} hint${s.settings.hints > 1 ? 's' : ''}` : '💡 No hints',
+          DIFF[s.settings.difficulty],
+          `📚 ${s.wordPool.toLocaleString()} words`,
+        ],
+  );
+  const missing = $derived(Math.max(0, info.minPlayers - online.length));
 
   let copied = $state(false);
   async function copyLink() {
@@ -71,7 +84,7 @@
     <section class="card players">
       <div class="section-head">
         <h2>Players <small>{online.length}/{MAX_PLAYERS}</small></h2>
-        {#if isHost && s.settings.mode === 'teams'}
+        {#if isHost && teamsOn}
           <button class="btn small white" onclick={() => send('team:shuffle')}>🔀 Shuffle</button>
         {/if}
       </div>
@@ -89,7 +102,7 @@
         </li>
       {/snippet}
 
-      {#if s.settings.mode === 'teams'}
+      {#if teamsOn}
         <div class="teams" style:--cols={Math.min(teams.length, 2)}>
           {#each teams as t (t.id)}
             <div class="team" style:--team={t.color}>
@@ -121,8 +134,10 @@
         </ul>
       {/if}
 
-      {#if online.length < 2}
-        <p class="waiting">⏳ Waiting for at least one more player… share the invite link!</p>
+      {#if missing}
+        <p class="waiting">
+          ⏳ {info.name} needs {info.minPlayers}+ players: waiting for {missing} more… share the invite link!
+        </p>
       {/if}
     </section>
 
@@ -151,8 +166,8 @@
 
   <footer class="start-bar">
     {#if isHost}
-      <button class="btn green big" disabled={online.length < 2} onclick={() => send('game:start')}>
-        🚀 Start game
+      <button class="btn green big" disabled={missing > 0} onclick={() => send('game:start')}>
+        🚀 Start {info.emoji} {info.name}
       </button>
     {:else}
       <div class="wait-host">⏳ Waiting for <b>{host?.name ?? 'the host'}</b> to start the game…</div>

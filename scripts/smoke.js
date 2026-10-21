@@ -125,6 +125,41 @@ async function powerUpTest() {
   }
 }
 
+async function imposterTest() {
+  const ps = ['Ivy', 'Jon', 'Kim', 'Lou'].map((n) => player(n));
+  const { code } = await ps[0].emit('room:create', { name: 'Ivy' });
+  for (const p of ps.slice(1)) await p.emit('room:join', { code, name: p.name });
+  const host = ps[0];
+  host.s.emit('settings:update', { game: 'imposter', rounds: 1, clueRounds: 1, clueTime: 30, voteTime: 30 });
+  await host.until((s) => s.settings.game === 'imposter' && s.players.length === 4, 'imposter settings');
+  host.s.emit('game:start');
+  for (const p of ps) await p.until((s) => s.phase === 'clues' && s.imp?.role, 'secret role');
+  const imp = ps.find((p) => p.state.imp.role === 'imposter');
+  const crew = ps.filter((p) => p !== imp);
+  assert.equal(crew.length, 3, 'one imposter');
+  assert.equal(imp.state.imp.word, null, 'imposter never sees the word');
+  const word = crew[0].state.imp.word;
+  assert.ok(crew.every((p) => p.state.imp.word === word), 'crew share the word');
+
+  // Everyone gives a clue, in the order the game picks.
+  while (host.state.phase === 'clues') {
+    const current = host.state.imp.current;
+    const giver = ps.find((p) => p.state.me === current);
+    giver.s.emit('imp:clue', 'thing');
+    await host.until((s) => s.phase !== 'clues' || s.imp.current !== current, 'next clue');
+  }
+  await host.until((s) => s.phase === 'vote', 'vote phase');
+  for (const p of ps) p.s.emit('imp:vote', p === imp ? crew[0].state.me : imp.state.me);
+  await host.until((s) => s.phase === 'guess', 'caught imposter gets a last guess');
+  imp.s.emit('imp:guess', word);
+  await host.until((s) => s.phase === 'impReveal', 'reveal');
+  assert.equal(host.state.imp.reveal.outcome, 'imposterGuessed', 'right guess steals the win');
+  assert.equal(host.state.players.find((p) => p.id === imp.state.me).score, 200);
+  await host.until((s) => s.phase === 'gameOver', 'game over', 30000);
+  console.log('✓ imposter: secret roles, clues, voting, last-chance guess steals the win');
+  for (const p of ps) p.s.disconnect();
+}
+
 async function soloGame() {
   const a = player('Alice');
   const b = player('Bob');
@@ -367,6 +402,7 @@ try {
   await teamGame();
   await dropoutTest();
   await drawerGraceTest();
+  await imposterTest();
   await powerUpTest();
   console.log('\nAll smoke tests passed 🎉');
   process.exit(0);

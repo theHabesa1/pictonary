@@ -1,6 +1,6 @@
 <script>
   import { tick } from 'svelte';
-  import { REACTIONS, TEAMS } from '../../shared/constants.js';
+  import { REACTIONS, TEAMS, isTeams } from '../../shared/constants.js';
   import { game, send } from '../lib/game.svelte.js';
   import PowerBar from './PowerBar.svelte';
 
@@ -23,9 +23,11 @@
   const me = $derived(s?.players.find((p) => p.id === s.me));
   const drawing = $derived(s?.phase === 'drawing');
   const isDrawer = $derived(drawing && turn?.drawerId === s.me);
-  const teams = $derived(s?.settings.mode === 'teams');
+  const teams = $derived(s ? isTeams(s.settings) : false);
 
   const placeholder = $derived.by(() => {
+    if (s?.phase === 'vote') return 'Who is the imposter? Discuss! 🕵️';
+    if (s?.imp && s.phase !== 'impReveal') return 'Chat — but never say the secret word! 🤫';
     if (!drawing) return 'Say something nice 💬';
     if (isDrawer) return "You're drawing! Only players who guessed see this";
     if (me?.guessed) return 'Chat with players who got it 🤫';
