@@ -24,7 +24,6 @@
   const summary = $derived(
     s.settings.game === 'cards'
       ? [
-          '🃏 Color Clash',
           `🔁 ${s.settings.rounds} round${s.settings.rounds > 1 ? 's' : ''}`,
           `🂠 ${s.settings.handSize} cards each`,
           `⏱️ ${s.settings.turnTime}s per turn`,
@@ -32,7 +31,6 @@
         ]
       : s.settings.game === 'imposter'
       ? [
-          '🕵️ Imposter',
           `🔁 ${s.settings.rounds} round${s.settings.rounds > 1 ? 's' : ''}`,
           `💬 ${s.settings.clueRounds} clue${s.settings.clueRounds > 1 ? 's' : ''} each`,
           `⏱️ ${s.settings.clueTime}s per clue`,
@@ -151,11 +149,11 @@
 
     <section class="card settings" class:open={settingsOpen}>
       <button class="settings-toggle" onclick={() => (settingsOpen = !settingsOpen)} aria-expanded={settingsOpen}>
-        <h2>⚙️ Game settings</h2>
+        <h2>{info.emoji} {info.name} settings</h2>
         <span class="toggle-cta">{settingsOpen ? 'Hide' : isHost ? 'Change' : 'View'} <span class="chev">▾</span></span>
       </button>
       <div class="section-head desktop-head">
-        <h2>Game settings</h2>
+        <h2>{info.emoji} {info.name} settings</h2>
         {#if !isHost}<small class="ro">Only {host?.name ?? 'the host'} can change these</small>{/if}
       </div>
       <div class="summary">

@@ -133,11 +133,12 @@ async function powerUpTest() {
 
 async function imposterTest() {
   const ps = ['Ivy', 'Jon', 'Kim', 'Lou'].map((n) => player(n));
-  const { code } = await ps[0].emit('room:create', { name: 'Ivy' });
+  const { code } = await ps[0].emit('room:create', { name: 'Ivy', game: 'imposter' });
   for (const p of ps.slice(1)) await p.emit('room:join', { code, name: p.name });
   const host = ps[0];
-  host.s.emit('settings:update', { game: 'imposter', rounds: 1, clueRounds: 1, clueTime: 30, voteTime: 30 });
-  await host.until((s) => s.settings.game === 'imposter' && s.players.length === 4, 'imposter settings');
+  host.s.emit('settings:update', { game: 'pictionary', rounds: 1, clueRounds: 1, clueTime: 30, voteTime: 30 });
+  await host.until((s) => s.settings.rounds === 1 && s.players.length === 4, 'imposter settings');
+  assert.equal(host.state.settings.game, 'imposter', 'the game picked on the home page can not be switched in the lobby');
   host.s.emit('game:start');
   for (const p of ps) await p.until((s) => s.phase === 'clues' && s.imp?.role, 'secret role');
   const imp = ps.find((p) => p.state.imp.role === 'imposter');
@@ -168,11 +169,11 @@ async function imposterTest() {
 
 async function cardsTest() {
   const ps = ['Mo', 'Nia', 'Oz'].map((n) => player(n));
-  const { code } = await ps[0].emit('room:create', { name: 'Mo' });
+  const { code } = await ps[0].emit('room:create', { name: 'Mo', game: 'cards' });
   for (const p of ps.slice(1)) await p.emit('room:join', { code, name: p.name });
   const host = ps[0];
-  host.s.emit('settings:update', { game: 'cards', rounds: 1, turnTime: 30, handSize: 7 });
-  await host.until((s) => s.settings.game === 'cards' && s.players.length === 3, 'card settings');
+  host.s.emit('settings:update', { rounds: 1, turnTime: 30, handSize: 7 });
+  await host.until((s) => s.settings.game === 'cards' && s.settings.handSize === 7 && s.players.length === 3, 'card settings');
   host.s.emit('game:start');
   for (const p of ps) await p.until((s) => s.phase === 'cards' && s.clash?.hand?.length === 7, 'dealt 7 cards');
   const ids = new Set(ps.flatMap((p) => p.state.clash.hand.map((c) => c.id)));

@@ -1,5 +1,5 @@
 <script>
-  import { CATEGORY_META, DRAW_TIMES, GAMES, TEAMS, parseCustomWords } from '../../shared/constants.js';
+  import { CATEGORY_META, DRAW_TIMES, TEAMS, parseCustomWords } from '../../shared/constants.js';
   import { send } from '../lib/game.svelte.js';
 
   let { settings, editable, wordPool = 0 } = $props();
@@ -32,19 +32,6 @@
 </script>
 
 <div class="settings" class:locked={!editable}>
-  <div class="row full">
-    <span class="label">Game</span>
-    <div class="seg games">
-      {#each GAMES as g}
-        <button class:on={settings.game === g.id} disabled={!editable} onclick={() => update({ game: g.id })}>
-          <span>{g.emoji}</span>
-          <b>{g.name}</b>
-          <small>{g.desc}</small>
-        </button>
-      {/each}
-    </div>
-  </div>
-
   {#if imposter}
     <div class="row">
       <label class="label" for="clue-rounds">Clue rounds</label>
@@ -304,7 +291,6 @@
   .seg button:disabled {
     cursor: default;
   }
-  .games button,
   .mode button {
     display: grid;
     grid-template-columns: auto 1fr;
@@ -313,30 +299,14 @@
     align-items: center;
     padding: 10px 12px;
   }
-  .games span,
   .mode span {
     grid-row: span 2;
     font-size: 1.8rem;
   }
-  .games b,
   .mode b {
     font-family: var(--font-display);
     font-size: 1.1rem;
   }
-  .seg.games {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-  }
-  .games small {
-    font-size: 0.76rem;
-    line-height: 1.25;
-  }
-  .games button.on {
-    background: #e9e3ff;
-    border-color: var(--violet);
-    box-shadow: inset 0 -3px 0 rgba(91, 61, 245, 0.25);
-  }
-  .games small,
   .mode small {
     font-weight: 600;
     color: var(--ink-soft);

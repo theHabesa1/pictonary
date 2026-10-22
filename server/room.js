@@ -255,8 +255,10 @@ export class Room {
   // ───────────────────────── lobby actions ─────────────────────────
 
   updateSettings(pid, patch) {
-    if (pid !== this.hostId || this.phase !== 'lobby') return;
-    this.settings = sanitizeSettings(patch, this.settings);
+    if (pid !== this.hostId || this.phase !== 'lobby' || !patch || typeof patch !== 'object') return;
+    // The game is chosen when the room is created (on the home page) and can't be changed.
+    const { game, ...rest } = patch;
+    this.settings = sanitizeSettings(rest, this.settings);
     // Players sitting in a team that no longer exists move to the smallest one.
     for (const p of this.players.values()) {
       if (p.team >= this.settings.teamCount) p.team = this.smallestTeam(p.id);
