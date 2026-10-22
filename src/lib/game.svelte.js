@@ -143,10 +143,11 @@ export function saveProfile() {
   save(PROFILE_KEY, { name: profile.name, avatar: profile.avatar });
 }
 
-export function createRoom() {
+/** Create a room for `gameId` ('pictionary' | 'cards' | 'imposter'). */
+export function createRoom(gameId = 'pictionary') {
   saveProfile();
   return new Promise((resolve) => {
-    socket.emit('room:create', { name: profile.name, avatar: profile.avatar }, (res) => {
+    socket.emit('room:create', { name: profile.name, avatar: profile.avatar, game: gameId }, (res) => {
       if (res?.error) game.error = res.error;
       else entered(res);
       resolve(res);

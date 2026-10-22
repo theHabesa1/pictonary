@@ -8,6 +8,7 @@ import { userFromToken } from './accounts.js';
 import { apiRouter } from './api.js';
 import { initDb } from './db.js';
 import { Room } from './room.js';
+import { sanitizeSettings } from '../shared/constants.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 // Local secrets (e.g. DATABASE_URL) live in a git-ignored .env file; hosts set them directly.
@@ -78,6 +79,8 @@ io.on('connection', (socket) => {
   on('room:create', (data = {}, ack) => {
     leaveCurrent();
     const r = new Room(io, newCode());
+    // The game picked on the home page (the host can still switch in the lobby).
+    r.settings = sanitizeSettings({ game: data.game }, r.settings);
     rooms.set(r.code, r);
     reply(ack, r.join(socket, data));
   });

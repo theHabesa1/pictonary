@@ -53,7 +53,7 @@
   async function copyLink() {
     try {
       if (navigator.share && matchMedia('(pointer: coarse)').matches) {
-        await navigator.share({ title: 'Play Pictonary with me!', text: `Join my Pictonary room ${s.code} 🎨`, url: link });
+        await navigator.share({ title: `Play ${info.name} with me!`, text: `Join my ${info.name} room ${s.code} ${info.emoji}`, url: link });
         return;
       }
       await navigator.clipboard.writeText(link);

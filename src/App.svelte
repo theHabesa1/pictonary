@@ -1,4 +1,5 @@
 <script>
+  import { gameInfo } from '../shared/constants.js';
   import { game } from './lib/game.svelte.js';
   import Home from './components/Home.svelte';
   import Lobby from './components/Lobby.svelte';
@@ -8,6 +9,12 @@
   import AccountModal from './components/AccountModal.svelte';
 
   const phase = $derived(game.state?.phase);
+
+  // Browser tab title follows the game you're in.
+  $effect(() => {
+    const g = game.state && gameInfo(game.state.settings.game);
+    document.title = g ? `${g.emoji} ${g.name} · room ${game.state.code}` : 'Pictonary — party games for family & friends';
+  });
 </script>
 
 <AccountModal />
