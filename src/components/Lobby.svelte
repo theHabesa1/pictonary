@@ -2,6 +2,7 @@
   import { MAX_PLAYERS, TEAMS, gameInfo, isTeams } from '../../shared/constants.js';
   import { game, leaveRoom, send } from '../lib/game.svelte.js';
   import AccountButton from './AccountButton.svelte';
+  import { openGuide, showGuideOnce } from '../lib/guide.svelte.js';
   import Logo from './Logo.svelte';
   import Settings from './Settings.svelte';
   import Chat from './Chat.svelte';
@@ -46,6 +47,10 @@
         ],
   );
   const missing = $derived(Math.max(0, info.minPlayers - online.length));
+  // Imposter's rules are the least obvious: show its guide the first time on this device.
+  $effect(() => {
+    if (s.settings.game === 'imposter') showGuideOnce('imposter');
+  });
 
   let copied = $state(false);
   async function copyLink() {
@@ -82,6 +87,7 @@
     </div>
     <div class="invite-actions">
       <button class="btn pink" onclick={copyLink}>{copied ? '✅ Link copied!' : '🔗 Invite friends'}</button>
+      <button class="btn white" onclick={() => openGuide(s.settings.game)}>❓ How to play</button>
       <span class="hint">Send the link — they just open it and pick a name.</span>
     </div>
   </section>
@@ -449,7 +455,13 @@
     .invite {
       padding: 12px 14px;
       gap: 10px;
-      flex-wrap: nowrap;
+      flex-wrap: wrap;
+    }
+    .invite-actions {
+      flex: 1 1 100%;
+    }
+    .invite-actions .btn {
+      flex: 1;
     }
     .invite .label {
       font-size: 0.7rem;

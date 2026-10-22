@@ -1,5 +1,6 @@
 <script>
   import { openAccount } from '../lib/account.svelte.js';
+  import { openGuide } from '../lib/guide.svelte.js';
   import { game, leaveRoom, send, toggleMute } from '../lib/game.svelte.js';
   import Chat from './Chat.svelte';
   import GameOver from './GameOver.svelte';
@@ -43,6 +44,31 @@
 
   let menuOpen = $state(false);
   const closeMenu = () => (menuOpen = false);
+
+  // Step tracker + a tip for what to do right now (depends on the phase and your role).
+  const STEPS = [['🃏', 'Role'], ['💬', 'Clues'], ['🗳️', 'Vote'], ['🎯', 'Guess'], ['🎭', 'Reveal']];
+  const step = $derived(
+    s.phase === 'clues' ? (showRole ? 1 : 0) : s.phase === 'vote' ? 2 : s.phase === 'guess' ? 3 : s.phase === 'impReveal' ? 4 : -1,
+  );
+  const tip = $derived.by(() => {
+    if (s.phase === 'clues' && !showRole) return '👆 First, tap the card below to see your secret role.';
+    if (s.phase === 'clues' && myTurn)
+      return isImposter
+        ? "🎤 Your turn! You don't know the word, so bluff a clue that fits the category and the clues so far."
+        : '🎤 Your turn! Type one word that hints at the secret word, but not too obvious.';
+    if (s.phase === 'clues')
+      return isImposter
+        ? '👂 Listen closely: the clues will help you guess the word and blend in.'
+        : "👂 Listen to everyone's clues. Who sounds like they're guessing?";
+    if (s.phase === 'vote')
+      return isImposter
+        ? '😈 Vote for someone else to throw everyone off!'
+        : '🗳️ Tap the player you think is the imposter. Most votes gets accused.';
+    if (s.phase === 'guess')
+      return imp?.accusedId === s.me ? '🎯 Last chance: guess the secret word to steal the win!' : '🤞 The imposter was caught! Can they guess the word?';
+    if (s.phase === 'impReveal') return '🎭 See who it was! Next round: a new word and a new imposter.';
+    return '';
+  });
   let innerWidth = $state(1200);
   const phone = $derived(innerWidth <= 760);
 
@@ -88,6 +114,7 @@
             {#if isHost && s.phase !== 'gameOver'}
               <button role="menuitem" onclick={() => { if (confirm('End the game for everyone and go back to the lobby?')) send('game:lobby'); closeMenu(); }}>⏹️ End game</button>
             {/if}
+            <button role="menuitem" onclick={() => { openGuide(s.settings.game); closeMenu(); }}>❓ How to play</button>
             <button role="menuitem" onclick={() => { openAccount(); closeMenu(); }}>⭐ My account</button>
             <button role="menuitem" onclick={() => { navigator.clipboard?.writeText(`${location.origin}${location.pathname}?r=${s.code}`); closeMenu(); }}>🔗 Copy invite link</button>
             <button role="menuitem" class="danger" onclick={() => confirm('Leave this game?') && leaveRoom()}>🚪 Leave room</button>
@@ -102,6 +129,17 @@
   </aside>
 
   <main class="stage scroll-thin">
+    {#if step >= 0}
+      <div class="tracker card">
+        <ol class="steps">
+          {#each STEPS as [emoji, label], i}
+            <li class:done={i < step} class:now={i === step}><span>{emoji}</span> <span class="st">{label}</span></li>
+          {/each}
+        </ol>
+        <p class="tip">{tip}</p>
+        <button class="rules" onclick={() => openGuide('imposter')}>❓ Rules</button>
+      </div>
+    {/if}
     {#if imp?.reveal}
       {@const rv = imp.reveal}
       {@const [title, side] = OUTCOME[rv.outcome] ?? ['', 'none']}
@@ -392,6 +430,60 @@
   }
   .stage > .card {
     padding: 16px 18px;
+  }
+
+  /* ───── step tracker ───── */
+  .stage > .tracker {
+    position: relative;
+    padding: 10px 14px;
+    box-shadow: var(--shadow-sm);
+  }
+  .steps {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    gap: 4px;
+    padding-right: 64px;
+  }
+  .steps li {
+    flex: 1;
+    text-align: center;
+    font-weight: 800;
+    font-size: 0.78rem;
+    padding: 4px 2px;
+    border-radius: 999px;
+    background: var(--line);
+    color: var(--muted);
+    white-space: nowrap;
+    transition: background 0.3s, color 0.3s;
+  }
+  .steps li.done {
+    background: #dcfce7;
+    color: #15803d;
+  }
+  .steps li.now {
+    background: var(--ink);
+    color: #fff;
+    animation: pop-in 0.3s ease;
+  }
+  .tip {
+    margin: 8px 0 0;
+    font-weight: 700;
+    color: var(--ink);
+    line-height: 1.4;
+  }
+  .rules {
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    border: 2px solid var(--line);
+    background: #fff;
+    border-radius: 999px;
+    padding: 2px 10px;
+    font-weight: 800;
+    font-size: 0.8rem;
+    color: var(--violet);
   }
 
   /* ───── role card ───── */
@@ -844,6 +936,15 @@
     padding: 12px;
     border-radius: 14px;
     box-shadow: var(--shadow-sm);
+  }
+  .phone .steps li:not(.now) .st {
+    display: none;
+  }
+  .phone .steps li.now {
+    flex: 2.4;
+  }
+  .phone .tip {
+    font-size: 0.88rem;
   }
   .phone .clue-list li {
     grid-template-columns: auto minmax(0, 90px) 1fr;

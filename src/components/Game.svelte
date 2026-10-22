@@ -8,6 +8,7 @@
   import ChooseWord from './ChooseWord.svelte';
   import GameOver from './GameOver.svelte';
   import { openAccount } from '../lib/account.svelte.js';
+  import { openGuide } from '../lib/guide.svelte.js';
   import Players from './Players.svelte';
   import PowerBar from './PowerBar.svelte';
   import Reactions from './Reactions.svelte';
@@ -125,6 +126,7 @@
             {#if isHost && s.phase !== 'gameOver'}
               <button role="menuitem" onclick={() => { if (confirm('End the game for everyone and go back to the lobby?')) send('game:lobby'); closeMenu(); }}>⏹️ End game</button>
             {/if}
+            <button role="menuitem" onclick={() => { openGuide('pictionary'); closeMenu(); }}>❓ How to play</button>
             <button role="menuitem" onclick={() => { openAccount(); closeMenu(); }}>⭐ My account &amp; card shop</button>
             <button role="menuitem" onclick={() => { navigator.clipboard?.writeText(inviteLink); closeMenu(); }}>🔗 Copy invite link</button>
             <button role="menuitem" class="danger" onclick={() => confirm('Leave this game?') && leaveRoom()}>🚪 Leave room</button>

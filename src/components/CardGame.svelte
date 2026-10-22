@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { CARD_COLORS, CARD_HEX, canPlayCard, cardPoints } from '../../shared/constants.js';
   import { openAccount } from '../lib/account.svelte.js';
+  import { openGuide } from '../lib/guide.svelte.js';
   import { flyCard, pileOffset, pileTilt, rectOf, setLayer } from '../lib/cardfx.js';
   import { game, leaveRoom, send, stateHooks, toggleMute } from '../lib/game.svelte.js';
   import { sfx } from '../lib/sound.js';
@@ -316,6 +317,7 @@
             {#if isHost && s.phase !== 'gameOver'}
               <button role="menuitem" onclick={() => { if (confirm('End the game for everyone and go back to the lobby?')) send('game:lobby'); closeMenu(); }}>⏹️ End game</button>
             {/if}
+            <button role="menuitem" onclick={() => { openGuide(s.settings.game); closeMenu(); }}>❓ How to play</button>
             <button role="menuitem" onclick={() => { openAccount(); closeMenu(); }}>⭐ My account</button>
             <button role="menuitem" onclick={() => { navigator.clipboard?.writeText(`${location.origin}${location.pathname}?r=${s.code}`); closeMenu(); }}>🔗 Copy invite link</button>
             <button role="menuitem" class="danger" onclick={() => confirm('Leave this game?') && leaveRoom()}>🚪 Leave room</button>

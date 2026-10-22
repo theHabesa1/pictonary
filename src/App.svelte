@@ -7,6 +7,7 @@
   import ImposterGame from './components/ImposterGame.svelte';
   import CardGame from './components/CardGame.svelte';
   import AccountModal from './components/AccountModal.svelte';
+import HowToPlay from './components/HowToPlay.svelte';
 
   const phase = $derived(game.state?.phase);
 
@@ -18,6 +19,7 @@
 </script>
 
 <AccountModal />
+<HowToPlay />
 
 {#if !game.state}
   {#if game.joining}

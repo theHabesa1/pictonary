@@ -3,6 +3,7 @@
   // and a swipeable slider on phones.
   import { GAMES, MAX_PLAYERS } from '../../shared/constants.js';
   import PlayingCard from './cards/PlayingCard.svelte';
+  import { openGuide } from '../lib/guide.svelte.js';
 
   let { busy = false, onplay } = $props();
 
@@ -99,6 +100,7 @@
           <button class="btn green wide play" disabled={busy} onclick={() => onplay?.(g.id)}>
             ✨ Create a {g.name} room
           </button>
+          <button class="how" onclick={() => openGuide(g.id)}>❓ How to play</button>
         </div>
       </article>
     {/each}
@@ -189,6 +191,15 @@
   }
   .play {
     margin-top: 4px;
+  }
+  .how {
+    border: none;
+    background: none;
+    color: var(--violet);
+    font-weight: 800;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    padding: 2px;
   }
   .wide {
     width: 100%;
