@@ -1,14 +1,13 @@
-import crypto from 'node:crypto';
+// Node server: serves the site, the accounts API and the game's WebSockets (/ws).
+// The same game runs on Cloudflare Workers too — see worker/index.js.
 import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
-import { Server } from 'socket.io';
-import { userFromToken } from './accounts.js';
-import { apiRouter } from './api.js';
-import { initDb } from './db.js';
-import { Room } from './room.js';
-import { sanitizeSettings } from '../shared/constants.js';
+import { WebSocketServer } from 'ws';
+import { AUTH_LIMIT, bearer, handleApi, rateLimiter } from './api.js';
+import { initDb } from './db-node.js';
+import { Hub, MAX_MESSAGE } from './hub.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 // Local secrets (e.g. DATABASE_URL) live in a git-ignored .env file; hosts set them directly.
@@ -23,138 +22,38 @@ const PORT = Number(process.env.PORT) || 3000;
 const dbKind = await initDb();
 
 const app = express();
-app.set('trust proxy', 1); // behind Render's proxy: req.ip is the player's IP
+app.set('trust proxy', 1); // behind a host's proxy: req.ip is the player's IP
 const server = http.createServer(app);
-// Fairly quick pings so a dropped player shows as "away" within ~20s.
-const io = new Server(server, { maxHttpBufferSize: 256 * 1024, pingInterval: 10_000, pingTimeout: 12_000 });
+const hub = new Hub();
 
-// Signed-in players send their login token when connecting; guests send none.
-io.use(async (socket, next) => {
-  try {
-    socket.data.user = await userFromToken(socket.handshake.auth?.token);
-  } catch (err) {
-    console.error('[socket auth]', err);
-    socket.data.user = null;
+// Game connections. noServer, so Vite's own WebSocket (live reload in dev) keeps working.
+const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_MESSAGE });
+server.on('upgrade', (req, sock, head) => {
+  if (new URL(req.url, 'http://x').pathname !== '/ws') {
+    if (!dev) sock.destroy();
+    return;
   }
-  next();
-});
-
-/** @type {Map<string, Room>} */
-const rooms = new Map();
-const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-
-function newCode() {
-  for (;;) {
-    let code = '';
-    for (let i = 0; i < 5; i++) code += CODE_CHARS[crypto.randomInt(CODE_CHARS.length)];
-    if (!rooms.has(code)) return code;
-  }
-}
-
-io.on('connection', (socket) => {
-  const room = () => rooms.get(socket.data.code);
-  const pid = () => socket.data.pid;
-
-  // Wrap handlers so one bad message can never crash the server (sync or async).
-  const on = (event, fn) =>
-    socket.on(event, (...args) => {
-      try {
-        const result = fn(...args);
-        if (result instanceof Promise) result.catch((err) => console.error(`[${event}]`, err));
-      } catch (err) {
-        console.error(`[${event}]`, err);
-      }
-    });
-  const reply = (ack, data) => typeof ack === 'function' && ack(data);
-
-  function leaveCurrent() {
-    const r = room();
-    if (!r) return;
-    const p = r.players.get(pid());
-    socket.leave(r.code);
-    socket.data.code = null;
-    r.remove(pid(), p ? `${p.name} left the room` : null);
-  }
-
-  on('room:create', (data = {}, ack) => {
-    leaveCurrent();
-    const r = new Room(io, newCode());
-    // The game picked on the home page (the host can still switch in the lobby).
-    r.settings = sanitizeSettings({ game: data.game }, r.settings);
-    rooms.set(r.code, r);
-    reply(ack, r.join(socket, data));
-  });
-
-  on('room:join', (data = {}, ack) => {
-    const code = String(data.code ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-    const r = rooms.get(code);
-    if (!r) return reply(ack, { error: `Room "${code}" doesn't exist (or it ended). Check the code!` });
-    if (socket.data.code && socket.data.code !== code) leaveCurrent();
-    reply(ack, r.join(socket, data));
-  });
-
-  on('room:leave', leaveCurrent);
-
-  on('settings:update', (patch) => room()?.updateSettings(pid(), patch));
-  on('team:set', ({ team, playerId } = {}) => room()?.setTeam(pid(), team, playerId));
-  on('team:shuffle', () => room()?.shuffleTeams(pid()));
-  on('player:kick', (targetId) => room()?.kick(pid(), targetId));
-  on('game:start', () => room()?.start(pid()));
-  on('game:lobby', () => room()?.backToLobby(pid()));
-  on('turn:skip', () => room()?.skip(pid()));
-  on('word:choose', (index) => room()?.chooseWord(pid(), index));
-  on('chat', (text) => room()?.chat(pid(), text));
-  on('react', (emoji) => room()?.react(pid(), emoji));
-  // Signed in or out without reconnecting: update who this socket belongs to.
-  on('auth', async (token, ack) => {
-    socket.data.user = token ? await userFromToken(token) : null;
-    room()?.linkAccount(pid(), socket.data.user);
-    reply(ack, { ok: !!socket.data.user });
-  });
-  on('power:use', (card) => room()?.usePower(pid(), card));
-  on('imp:clue', (text) => room()?.engine?.submitClue?.(pid(), text));
-  on('imp:vote', (targetId) => room()?.engine?.vote?.(pid(), targetId));
-  on('imp:guess', (text) => room()?.engine?.imposterGuess?.(pid(), text));
-  on('cards:play', ({ id, color } = {}) => room()?.engine?.play?.(pid(), id, color));
-  on('cards:draw', () => room()?.engine?.draw?.(pid()));
-  on('cards:pass', () => room()?.engine?.pass?.(pid()));
-  on('cards:last', () => room()?.engine?.callLastCard?.(pid()));
-  on('cards:catch', (targetId) => room()?.engine?.catchPlayer?.(pid(), targetId));
-  on('power:refresh', () => room()?.refreshCards(pid()));
-
-  on('draw:op', (op) => room()?.drawOp(socket, pid(), op));
-  on('draw:pts', (data) => room()?.drawPoints(socket, pid(), data));
-  on('draw:fill', (data) => room()?.drawFill(socket, pid(), data));
-  on('draw:undo', () => room()?.drawUndo(socket, pid()));
-  on('draw:clear', () => room()?.drawClear(socket, pid()));
-  on('draw:sync', () => {
-    const r = room();
-    if (r) socket.emit('draw:sync', { turnId: r.turn?.id ?? null, ops: r.ops });
-  });
-
-  on('disconnect', () => {
-    const r = room();
-    if (r && r.players.get(pid())?.socketId === socket.id) r.disconnect(pid());
+  wss.handleUpgrade(req, sock, head, (ws) => {
+    const socket = hub.connect({ send: (text) => ws.send(text), close: (code, reason) => ws.close(code, reason) });
+    ws.on('message', (data, isBinary) => !isBinary && socket.message(data.toString()));
+    ws.on('close', () => socket.drop());
+    ws.on('error', () => socket.drop());
   });
 });
 
-// Game clock: hints, timers, turn changes and cleanup.
-setInterval(() => {
-  const now = Date.now();
-  for (const [code, r] of rooms) {
-    try {
-      if (!r.tick(now)) rooms.delete(code);
-    } catch (err) {
-      console.error(`[tick ${code}]`, err);
-    }
-  }
-}, 250);
+setInterval(() => hub.tick(), 250);
 
-const startedAt = new Date();
-app.get('/health', (_req, res) =>
-  res.json({ ok: true, rooms: rooms.size, upSince: startedAt.toISOString(), uptimeMin: Math.round(process.uptime() / 60) }),
-);
-app.use('/api', apiRouter());
+app.get('/health', (_req, res) => res.json(hub.stats()));
+
+const allowAuth = rateLimiter(AUTH_LIMIT.max, AUTH_LIMIT.windowMs);
+app.use('/api', express.json({ limit: '8kb' }), async (req, res) => {
+  const { status, data } = await handleApi(req.method, req.path, {
+    body: req.body,
+    token: bearer(req.get('authorization')),
+    allow: () => allowAuth(req.ip),
+  });
+  res.status(status).json(data);
+});
 
 // Render's free plan puts the server to sleep after 15 minutes without visitors. Visiting our
 // own public URL every 10 minutes keeps it awake (Render sets RENDER_EXTERNAL_URL for us).

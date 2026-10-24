@@ -47,7 +47,8 @@ export function extendStroke(x, y) {
   current.points.push(x, y);
   pending.push(x, y);
   if (ctx) drawStroke(ctx, current, from);
-  flushTimer ??= setTimeout(flush, 33);
+  // Points go out in batches, 20 a second: smooth to watch, light on the server's message budget.
+  flushTimer ??= setTimeout(flush, 50);
 }
 
 export function endStroke() {

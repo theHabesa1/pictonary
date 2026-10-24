@@ -1,5 +1,6 @@
-import fs from 'node:fs';
 import { CATEGORY_META, parseCustomWords } from '../shared/constants.js';
+// Thousands more drawable words generated from WordNet + SCOWL (see scripts/build-words.mjs).
+import GENERATED from './wordbank.json' with { type: 'json' };
 
 // Hand-picked classics, grouped by category and difficulty. These are merged with the
 // generated word bank below and always keep the difficulty given here.
@@ -52,9 +53,6 @@ const HANDPICKED = {
 };
 
 const DIFFS = ['easy', 'medium', 'hard'];
-
-// Thousands more drawable words generated from WordNet + SCOWL (see scripts/build-words.mjs).
-const GENERATED = JSON.parse(fs.readFileSync(new URL('./wordbank.json', import.meta.url), 'utf8'));
 
 /** category -> difficulty -> [word]; every word appears once across the whole bank. */
 const WORDS = {};

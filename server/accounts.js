@@ -1,4 +1,5 @@
 // Accounts, stars, stats and power-up card inventory.
+import { Buffer } from 'node:buffer';
 import crypto from 'node:crypto';
 import { promisify } from 'node:util';
 import { AVATARS } from '../shared/constants.js';
@@ -32,8 +33,10 @@ async function checkPassword(password, stored) {
   const actual = await scrypt(password, Buffer.from(salt, 'base64'), expected.length);
   return crypto.timingSafeEqual(actual, expected);
 }
-// Used when the username doesn't exist, so failed logins take the same time either way.
-const DUMMY_HASH = await hashPassword('not-a-real-password');
+// Checked when the username doesn't exist, so failed logins take the same time either way.
+// (The hash of a random password that was thrown away; fixed so startup doesn't pay for it.)
+const DUMMY_HASH =
+  'scrypt$X85NT3NwAiVXEre938WwsQ==$zL0zdw4nh5huYKx3DCWT0OjFGIIKkkXFEZprpWaXpgpnqwvBduICZxCK884AqSipkxa7B3DJZPHEfVIcVo9MqA==';
 
 export function publicUser(row) {
   return {

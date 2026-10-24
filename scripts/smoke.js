@@ -1,8 +1,9 @@
 // End-to-end smoke test: simulates players over real sockets against a running server.
 // Usage: npm start (in another terminal), then: npm test
-// Against a deployed site: URL=https://your-site.onrender.com npm test
+// Against a deployed site: URL=https://your-site.workers.dev npm test
 import assert from 'node:assert/strict';
-import { io } from 'socket.io-client';
+import WebSocket from 'ws';
+import { createSocket, socketUrl } from '../src/lib/socket.js';
 import { canPlayCard } from '../shared/constants.js';
 
 const URL = process.env.URL || 'http://localhost:3000';
@@ -21,7 +22,7 @@ async function waitFor(fn, what, ms = REMOTE ? 15000 : 5000) {
 }
 
 function player(name, token) {
-  const s = io(URL, { transports: ['websocket'], forceNew: true, auth: { token } });
+  const s = createSocket(socketUrl(URL), { auth: () => ({ token }), WebSocket });
   const p = { s, name, state: null, chat: [], ops: [], rewards: [], splats: 0, notices: [] };
   s.on('power:result', (n) => p.notices.push(n));
   s.on('state', (st) => (p.state = st));

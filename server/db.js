@@ -1,11 +1,6 @@
-// Database: real Postgres when DATABASE_URL is set (e.g. a free Neon database in production),
-// otherwise an embedded Postgres (PGlite) stored in ./data — zero setup for local play.
-// Both speak the same SQL and return { rows }.
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+// Database access for accounts. Each host plugs in its own driver with useDb(): Node uses
+// Postgres (pg) or an embedded PGlite (server/db-node.js), Cloudflare uses Neon's HTTP driver
+// (worker/index.js). They all speak the same SQL and return { rows }.
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS users (
@@ -51,31 +46,33 @@ CREATE TABLE IF NOT EXISTS game_results (
 CREATE INDEX IF NOT EXISTS game_results_user ON game_results (user_id, played_at DESC);
 `;
 
-let impl = null;
+/** The schema as separate statements, for drivers that run one statement at a time. */
+export const SCHEMA_STATEMENTS = SCHEMA.split(';').map((s) => s.trim()).filter(Boolean);
 
-export async function initDb() {
-  const url = process.env.DATABASE_URL;
-  if (url) {
-    const { default: pg } = await import('pg');
-    // Always verify the database's TLS certificate (Neon and most hosts have valid ones).
-    const connectionString = url.replace(/sslmode=(require|prefer|verify-ca)\b/, 'sslmode=verify-full');
-    const pool = new pg.Pool({ connectionString, max: 5 });
-    impl = { query: (text, params) => pool.query(text, params), exec: (text) => pool.query(text), kind: 'Postgres' };
-  } else {
-    const { PGlite } = await import('@electric-sql/pglite');
-    const dir = process.env.PGLITE_DIR || path.join(root, 'data', 'pglite');
-    fs.mkdirSync(dir, { recursive: true });
-    const db = await PGlite.create(dir);
-    impl = { query: (text, params) => db.query(text, params), exec: (text) => db.exec(text), kind: `embedded Postgres (${path.relative(root, dir)})` };
-    if (process.env.RENDER || process.env.NODE_ENV === 'production') {
-      console.warn('⚠️  No DATABASE_URL set: accounts are stored on local disk and will be lost when the server restarts.');
-    }
-  }
-  await impl.exec(SCHEMA);
-  return impl.kind;
+let impl = null;
+let ready = null;
+
+/**
+ * Plug in a database driver: { query(text, params) → Promise<{ rows }>, schema() → Promise }.
+ * `schema()` creates the tables if they're missing; it runs before the first query.
+ */
+export function useDb(driver) {
+  impl = driver;
+  ready = null;
 }
 
-export function query(text, params = []) {
+export const hasDb = () => impl !== null;
+
+export function ensureSchema() {
   if (!impl) throw new Error('Database not initialised');
+  ready ??= impl.schema(SCHEMA, SCHEMA_STATEMENTS).catch((err) => {
+    ready = null; // try again on the next query
+    throw err;
+  });
+  return ready;
+}
+
+export async function query(text, params = []) {
+  await ensureSchema();
   return impl.query(text, params);
 }
