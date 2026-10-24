@@ -5,3 +5,5 @@ dist/
 .env
 .claude/
 data/
+.dev.vars
+.wrangler/

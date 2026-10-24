@@ -1,75 +1,69 @@
-// HTTP API for accounts and the power-up shop. Auth: "Authorization: Bearer <token>".
-import express from 'express';
+// HTTP API for accounts and the power-up shop, independent of the web framework: Node (Express)
+// and Cloudflare (Worker) both call handleApi(). Auth: "Authorization: Bearer <token>".
 import {
   AccountError, buyCard, deleteAccount, getHistory, getInventory, leaderboard, login, logout, register,
   updateProfile, userFromToken,
 } from './accounts.js';
 
-/** Tiny in-memory rate limiter: `max` requests per `windowMs` per IP. */
-function rateLimit(max, windowMs) {
+/** Tiny in-memory rate limiter: allow `max` hits per `windowMs` per key (e.g. an IP address). */
+export function rateLimiter(max, windowMs) {
   const hits = new Map();
-  return (req, res, next) => {
+  return (key) => {
     const now = Date.now();
-    const list = (hits.get(req.ip) ?? []).filter((t) => now - t < windowMs);
-    if (list.length >= max) return res.status(429).json({ error: 'Too many tries — wait a few minutes and try again.' });
+    const list = (hits.get(key) ?? []).filter((t) => now - t < windowMs);
+    if (list.length >= max) return false;
     list.push(now);
-    hits.set(req.ip, list);
+    hits.set(key, list);
     if (hits.size > 5000) hits.clear();
-    next();
+    return true;
   };
 }
 
-const handle = (fn) => async (req, res) => {
-  try {
-    res.json(await fn(req));
-  } catch (err) {
-    if (err instanceof AccountError) return res.status(err.status).json({ error: err.message });
-    console.error('[api]', err);
-    res.status(500).json({ error: 'Something went wrong on our side. Please try again.' });
-  }
+// Sign-up and sign-in tries per IP (passwords can't be guessed quickly).
+export const AUTH_LIMIT = { max: 20, windowMs: 10 * 60_000 };
+
+const ROUTES = {
+  'POST /register': { limited: true, run: ({ body }) => register(body) },
+  'POST /login': { limited: true, run: ({ body }) => login(body) },
+  'POST /logout': { auth: true, run: async ({ token }) => (await logout(token), { ok: true }) },
+  'GET /me': {
+    auth: true,
+    run: async ({ user }) => ({ user, inventory: await getInventory(user.id), history: await getHistory(user.id) }),
+  },
+  'PATCH /me': { auth: true, run: async ({ user, body }) => ({ user: await updateProfile(user.id, body) }) },
+  'DELETE /me': { auth: true, run: async ({ user }) => (await deleteAccount(user.id), { ok: true }) },
+  'POST /shop/buy': {
+    auth: true,
+    run: async ({ user, body }) => {
+      const { stars } = await buyCard(user.id, body?.card);
+      return { stars, inventory: await getInventory(user.id) };
+    },
+  },
+  'GET /leaderboard': { run: async () => ({ players: await leaderboard() }) },
 };
 
-async function requireUser(req, res, next) {
+export const bearer = (header) => String(header ?? '').replace(/^Bearer\s+/i, '');
+
+/**
+ * Handle one API call. `path` is relative to /api (e.g. "/login"). `allow()` says whether this
+ * caller is still under the sign-in rate limit. Returns { status, data } to send back as JSON.
+ */
+export async function handleApi(method, path, { body = null, token = '', allow = () => true } = {}) {
+  const route = ROUTES[`${method} ${path}`];
+  if (!route) return { status: 404, data: { error: 'Not found' } };
   try {
-    req.token = (req.get('authorization') ?? '').replace(/^Bearer\s+/i, '');
-    req.user = await userFromToken(req.token);
+    if (route.limited && !(await allow())) {
+      return { status: 429, data: { error: 'Too many tries — wait a few minutes and try again.' } };
+    }
+    let user = null;
+    if (route.auth) {
+      user = await userFromToken(token).catch((err) => console.error('[auth]', err));
+      if (!user) return { status: 401, data: { error: 'Please sign in again.' } };
+    }
+    return { status: 200, data: await route.run({ body: body ?? {}, token, user }) };
   } catch (err) {
-    console.error('[auth]', err);
+    if (err instanceof AccountError) return { status: err.status, data: { error: err.message } };
+    console.error('[api]', err);
+    return { status: 500, data: { error: 'Something went wrong on our side. Please try again.' } };
   }
-  if (!req.user) return res.status(401).json({ error: 'Please sign in again.' });
-  next();
-}
-
-export function apiRouter() {
-  const r = express.Router();
-  r.use(express.json({ limit: '8kb' }));
-  const authLimit = rateLimit(20, 10 * 60_000);
-
-  r.post('/register', authLimit, handle((req) => register(req.body)));
-  r.post('/login', authLimit, handle((req) => login(req.body)));
-  r.post('/logout', requireUser, handle(async (req) => (await logout(req.token), { ok: true })));
-
-  r.get(
-    '/me',
-    requireUser,
-    handle(async (req) => ({
-      user: req.user,
-      inventory: await getInventory(req.user.id),
-      history: await getHistory(req.user.id),
-    })),
-  );
-  r.patch('/me', requireUser, handle(async (req) => ({ user: await updateProfile(req.user.id, req.body) })));
-  r.delete('/me', requireUser, handle(async (req) => (await deleteAccount(req.user.id), { ok: true })));
-
-  r.post(
-    '/shop/buy',
-    requireUser,
-    handle(async (req) => {
-      const { stars } = await buyCard(req.user.id, req.body?.card);
-      return { stars, inventory: await getInventory(req.user.id) };
-    }),
-  );
-
-  r.get('/leaderboard', handle(async () => ({ players: await leaderboard() })));
-  return r;
 }

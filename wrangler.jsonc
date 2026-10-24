@@ -1,0 +1,23 @@
+// Cloudflare Workers config (free plan). Build the site first: npm run build
+// Local test: npm run cf:dev · Deploy: npm run cf:deploy (or connect the GitHub repo in the dashboard)
+// The accounts database is a secret: add DATABASE_URL under Settings → Variables and secrets
+// (locally: put DATABASE_URL=... in a git-ignored .dev.vars file).
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "pictonary",
+  "main": "worker/index.js",
+  "compatibility_date": "2026-04-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*", "/ws", "/health"]
+  },
+  // One Durable Object holds every game room in memory (free plan: SQLite-backed classes only).
+  "durable_objects": {
+    "bindings": [{ "name": "GAME", "class_name": "GameServer" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["GameServer"] }],
+  "observability": { "enabled": true }
+}

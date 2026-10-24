@@ -1,15 +1,11 @@
 import { tick } from 'svelte';
-import { io } from 'socket.io-client';
 import { AVATARS } from '../../shared/constants.js';
+import { createSocket, socketUrl } from './socket.js';
 import { setMuted, sfx } from './sound.js';
 import { getToken } from './token.js';
 
 // The login token is sent on every (re)connect so the server knows who's signed in.
-export const socket = io({
-  reconnectionDelay: 500,
-  reconnectionDelayMax: 3000,
-  auth: (cb) => cb({ token: getToken() }),
-});
+export const socket = createSocket(socketUrl(location.origin), { auth: () => ({ token: getToken() }) });
 
 const PROFILE_KEY = 'pictonary.profile';
 const SESSION_KEY = 'pictonary.session';
@@ -216,7 +212,7 @@ socket.on('disconnect', () => (game.connected = false));
 
 // Phones pause background tabs; reconnect right away when the game comes back on screen.
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && !socket.connected) socket.connect();
+  if (document.visibilityState === 'visible') socket.connect();
 });
 
 /**
