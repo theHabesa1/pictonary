@@ -13,13 +13,16 @@ Built with **Svelte 5** + **Vite** on the front end and plain **WebSockets** for
 - 🖌️ **Drawing tools**: 20 colors plus a custom color picker, 5 brush sizes, eraser, fill bucket, undo, and clear. Keyboard shortcuts `B` `E` `F` `1-5` `Ctrl+Z`.
 - 🎯 3 word choices per turn (easy / medium / hard; harder words are worth more), **3,300+ family-friendly words** in 10 categories, plus **custom words** in any language. **🌟 Pop Culture** covers people, characters, films and places known all over the world: Michael Jackson, Messi, Pikachu, the Eiffel Tower… Famous names also accept the surname ("Jackson").
 - ♻️ Words don't repeat: not within a room, and not from one room to the next. The server remembers what every room was offered and serves the least-recently-seen words first.
-- 🔥 "So close!" hints for near-miss guesses. Close guesses stay out of the public chat (only the guesser and the players who already know the word see them), correct guesses are hidden, and players who already guessed chat privately.
+- 🤷 **Don't know the words?** The drawer can swap the choices for new ones, for 40% of their points (once they have 100).
+- 🔥 "So close!" hints for near-miss guesses. A guess that matches 60% of the word's letters is only shown to the player who typed it, correct guesses are hidden, and players who already guessed chat privately.
 - 🙈 **Hide the word**: the drawer and players who already guessed can blank the word on their own screen, so someone sitting next to them can't peek. Hidden word choices and secret chat are blurred until pressed.
 - 😂 Live emoji reactions, sound effects, a podium with confetti, and a team scoreboard.
 - 📱 Works on phones, tablets and desktop. If you refresh or your Wi-Fi drops, you rejoin with your points intact.
 - 👑 Host controls: settings, kick, skip turn, end game. If the host leaves, host passes to another player automatically.
 - 👤 **Accounts** (username + password, no email): your level, XP, wins, correct guesses, drawings guessed and recent games are all saved. There's also a top-players board, and you can delete your account at any time.
 - 🎴 **Power-up cards**, bought with ⭐ stars that are deliberately slow to earn. You can play 1 card per turn and 3 per game, and the host can switch cards off.
+
+- ✨ **What's new** notes pop up once for returning players after an update (and stay one tap away on the home page). Add each release at the top of `src/lib/news.svelte.js`.
 
 ## Stars & power-ups
 

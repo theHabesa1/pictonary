@@ -4,6 +4,7 @@
     createRoom, game, joinAsNewPlayer, joinRoom, lastSeat, profile, saveProfile, takeOverSeat, urlCode,
   } from '../lib/game.svelte.js';
   import { saveAccountProfile } from '../lib/account.svelte.js';
+  import { openNews, showNewsOnce } from '../lib/news.svelte.js';
   import AccountButton from './AccountButton.svelte';
   import GameSlider from './GameSlider.svelte';
   import Logo from './Logo.svelte';
@@ -12,6 +13,9 @@
     saveProfile();
     saveAccountProfile();
   };
+
+  // Returning players get the release notes once after an update (not when following an invite).
+  if (!urlCode) showNewsOnce();
 
   const resume = urlCode ? null : lastSeat();
   let code = $state(urlCode ?? '');
@@ -53,7 +57,10 @@
 </script>
 
 <main class="home">
-  <div class="account-corner"><AccountButton /></div>
+  <div class="account-corner">
+    <button class="news-btn" onclick={openNews}>✨ What's new</button>
+    <AccountButton />
+  </div>
   <Logo />
   <p class="tagline">
     Free party games for family &amp; friends 🎉<br />Pick a game, share the link, play together. No sign-up needed.
@@ -186,9 +193,26 @@
     display: none;
   }
   .account-corner {
-    align-self: flex-end;
+    align-self: stretch;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
     margin-bottom: -12px;
     min-height: 34px;
+  }
+  .news-btn {
+    border: 2px solid var(--ink);
+    border-radius: 999px;
+    background: #fff;
+    color: var(--ink);
+    padding: 5px 12px;
+    font-weight: 800;
+    font-size: 0.85rem;
+    box-shadow: 0 3px 0 var(--ink);
+  }
+  .news-btn:hover {
+    background: var(--green-soft);
   }
   .conflict {
     text-align: center;
