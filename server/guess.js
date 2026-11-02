@@ -13,7 +13,6 @@ export function normalize(s) {
 }
 
 export function levenshtein(a, b) {
-  if (Math.abs(a.length - b.length) > 2) return 3;
   const prev = Array.from({ length: b.length + 1 }, (_, i) => i);
   for (let i = 1; i <= a.length; i++) {
     let diag = prev[0];
@@ -40,20 +39,27 @@ export function isCorrect(guess, word, alts) {
 // Little words that give nothing away on their own ("the" in "Winnie the Pooh").
 const FILLER = new Set(['the', 'and', 'of', 'a', 'an', 'in', 'on', 'to', 'with', 'mr', 'mrs', 'dr', 'de', 'da', 'van', 'del']);
 
+/** How alike two strings are, from 0 to 1: the share of letters that line up (1 = identical). */
+export function similarity(a, b) {
+  if (!a || !b) return 0;
+  return 1 - levenshtein(a, b) / Math.max(a.length, b.length);
+}
+
+// A guess this alike (60% of the letters match) gives too much away to show everyone.
+const CLOSE = 0.6;
+
 /**
- * Is `guess` nearly right? A typo or two ("elefant"), or one real part of a longer answer
- * ("jackson" for "Michael Jackson"). Close guesses are kept out of the public chat.
+ * Is `guess` nearly right? Typos ("manky" for "monkey"), most of the word ("strawb" for
+ * "strawberry"), or one real part of a longer answer ("jakson" for "Michael Jackson"), also
+ * inside a longer message. Close guesses are only shown to the player who typed them.
  */
 export function isClose(guess, word, alts) {
   const g = normalize(guess);
   if (squash(g).length < 3) return false;
-  const tokens = g.split(' ');
+  const tokens = g.split(' ').filter((t) => t.length >= 3 && !FILLER.has(t));
   return answers(word, alts).some((w) => {
-    const b = squash(w);
-    if (levenshtein(squash(g), b) <= (b.length >= 7 ? 2 : 1)) return true;
+    if (similarity(squash(g), squash(w)) >= CLOSE) return true;
     const parts = w.split(' ').filter((part) => part.length >= 3 && !FILLER.has(part));
-    return parts.some((part) =>
-      tokens.some((t) => t === part || (part.length >= 5 && levenshtein(t, part) <= (part.length >= 8 ? 2 : 1))),
-    );
+    return parts.some((part) => tokens.some((t) => similarity(t, part) >= CLOSE));
   });
 }

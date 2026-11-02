@@ -69,7 +69,7 @@
           <span class="body">
             <b style:color={teams ? TEAMS[m.team]?.color : null}>{m.name}</b>
             {#if m.channel === 'guessed'}<span class="lock" title="Only visible to players who know the word">🤫</span>{/if}
-            {#if m.channel === 'close'}<span class="lock" title="Very close! Hidden from the other guessers">🔥</span>{/if}
+            {#if m.channel === 'close'}<span class="lock" title="Very close! Only you can see this guess">🔥</span>{/if}
             <!-- 🙈 hide mode: anything that could give the word away is blurred until pressed -->
             <span class="txt" class:blur={knowing && game.hideWord}>{m.text}</span>
           </span>

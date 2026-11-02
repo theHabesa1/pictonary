@@ -818,10 +818,9 @@ export class Room {
         if (this.canGuess(p)) return this.correctGuess(p);
         return this.whisper(pid, "🤫 That's it! But it's not your team's turn — keep it secret!");
       }
-      // A nearly-right guess would help everyone else, so only the guesser (and players who
-      // already know the word) see it.
+      // A nearly-right guess would help everyone else, so only the player who typed it sees it.
       if (isClose(msg, t.word, t.alts)) {
-        this.sendToKnowers({ ...base, channel: 'close' }, p.id);
+        if (p.socketId) this.io.to(p.socketId).emit('chat', { ...base, channel: 'close' });
         return this.whisper(pid, '🔥 So close! Only you can see that guess.', 'close');
       }
       return this.publish(base);
@@ -852,11 +851,10 @@ export class Room {
     if (sid) this.io.to(sid).emit('chat', { id: uid(6), type, text });
   }
 
-  /** Send to the drawer and everyone who guessed the word (plus `alsoTo`, a player id). */
-  sendToKnowers(msg, alsoTo = null) {
+  sendToKnowers(msg) {
     const t = this.turn;
     for (const p of this.players.values()) {
-      if (p.socketId && (p.id === t.drawerId || t.guessed.has(p.id) || p.id === alsoTo)) this.io.to(p.socketId).emit('chat', msg);
+      if (p.socketId && (p.id === t.drawerId || t.guessed.has(p.id))) this.io.to(p.socketId).emit('chat', msg);
     }
   }
 

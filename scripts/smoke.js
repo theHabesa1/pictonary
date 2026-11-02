@@ -238,17 +238,15 @@ async function soloGame() {
   await sleep(SETTLE);
   assert.equal(drawer.ops.length, 0, 'guesser stroke rejected');
 
-  // Wrong guess goes public, a nearly-right guess only reaches the guesser (and the drawer),
-  // right guess is hidden.
+  // Wrong guess goes public, a nearly-right guess only reaches the guesser, right guess is hidden.
   g1.s.emit('chat', 'definitely not it');
   if (word.replace(/[^\p{L}]/gu, '').length >= 4) {
     const near = word.slice(0, -1) + (word.endsWith('x') ? 'y' : 'x');
     g1.s.emit('chat', near);
     await waitFor(() => g1.chat.some((m) => m.type === 'close'), 'g1 told the guess was close');
-    await waitFor(() => drawer.chat.some((m) => m.text === near && m.channel === 'close'), 'drawer sees the close guess');
     assert.ok(g1.chat.some((m) => m.text === near && m.channel === 'close'), 'g1 sees their own close guess');
     await sleep(SETTLE);
-    assert.ok(!g2.chat.some((m) => m.text === near), 'close guess hidden from other guessers');
+    assert.ok(![g2, drawer].some((p) => p.chat.some((m) => m.text === near)), 'close guess hidden from everyone else');
     assert.ok(g2.chat.some((m) => m.text === 'definitely not it'), 'wrong guesses are public');
   }
   g1.s.emit('chat', word.toUpperCase() + '!!');
@@ -454,6 +452,10 @@ async function wordTest() {
   assert.ok(isCorrect('PELE', 'Pelé'), 'accents ignored');
   assert.ok(isClose('michael', 'Michael Jackson', ['Jackson']), 'part of a name is close');
   assert.ok(isClose('elefant', 'elephant'), 'a typo is close');
+  // 60% of the letters matching is close: two typos, most of the word, or inside a sentence.
+  assert.ok(isClose('manky', 'monkey') && isClose('strawb', 'strawberry'), '60% match is close');
+  assert.ok(isClose('is it jakson?', 'Michael Jackson', ['Jackson']), 'close word inside a sentence');
+  assert.ok(!isClose('straw', 'strawberry') && !isClose('pasta', 'pizza'), 'under 60% is not close');
   assert.ok(!isClose('banana', 'elephant') && !isClose('the', 'Winnie the Pooh'), 'unrelated guesses are not close');
 
   // Pop culture category.
