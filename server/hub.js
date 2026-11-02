@@ -248,6 +248,7 @@ export class Hub {
     on('game:lobby', () => room()?.backToLobby(pid()));
     on('turn:skip', () => room()?.skip(pid()));
     on('word:choose', (index) => room()?.chooseWord(pid(), index));
+    on('words:swap', () => room()?.swapWords(pid()));
     on('chat', (text) => room()?.chat(pid(), text));
     on('react', (emoji) => room()?.react(pid(), emoji));
     // Signed in or out without reconnecting: update who this socket belongs to.

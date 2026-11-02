@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import WebSocket from 'ws';
 import { createSocket, socketUrl } from '../src/lib/socket.js';
-import { canPlayCard } from '../shared/constants.js';
+import { SWAP_MIN_POINTS, canPlayCard, swapCost } from '../shared/constants.js';
 
 const URL = process.env.URL || 'http://localhost:3000';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -398,6 +398,42 @@ async function hintTest() {
   b.s.disconnect();
 }
 
+async function swapTest() {
+  // 🤷 "I don't know these words": new choices for 40% of the drawer's points, once they have enough.
+  const a = player('Ola');
+  const b = player('Pia');
+  const { code } = await a.emit('room:create', { name: 'Ola' });
+  await b.emit('room:join', { code, name: 'Pia' });
+  a.s.emit('settings:update', { rounds: 2, drawTime: 60 });
+  await a.until((s) => s.players.length === 2 && s.settings.rounds === 2, 'settings');
+  a.s.emit('game:start');
+  await a.until((s) => s.phase === 'choosing', 'choosing');
+  const first = a.state.turn.drawerId === a.state.me ? a : b;
+  const second = first === a ? b : a;
+  await first.until((s) => s.turn?.choices, 'choices');
+  const before = first.state.turn.choices.map((c) => c.word).join();
+  first.s.emit('words:swap');
+  await waitFor(() => first.chat.some((m) => m.type === 'private' && m.text.includes('points first')), 'no swap without points');
+  assert.equal(first.state.turn.choices.map((c) => c.word).join(), before, 'choices kept at 0 points');
+
+  // The other player earns points by guessing, then swaps on their own turn.
+  first.s.emit('word:choose', 0);
+  await first.until((s) => s.phase === 'drawing' && s.turn.word, 'drawing');
+  second.s.emit('chat', first.state.turn.word);
+  await second.until((s) => s.phase === 'choosing' && s.turn.drawerId === s.me && s.turn.choices, 'second drawer picking', 15000);
+  const score = second.state.players.find((p) => p.id === second.state.me).score;
+  assert.ok(score >= SWAP_MIN_POINTS, 'enough points to swap');
+  const old = second.state.turn.choices.map((c) => c.word);
+  second.s.emit('words:swap');
+  await second.until((s) => s.turn.choices?.every((c) => !old.includes(c.word)), 'new word choices');
+  const after = second.state.players.find((p) => p.id === second.state.me).score;
+  assert.equal(after, score - swapCost(score), 'paid 40% of their points');
+  await waitFor(() => first.chat.some((m) => m.text?.includes("didn't know those words")), 'everyone told about the swap');
+  console.log(`✓ swap words: refused at 0 points, then ${old.join(' / ')} swapped for ${score - after} of ${score} points`);
+  a.s.disconnect();
+  b.s.disconnect();
+}
+
 async function teamGame() {
   const ps = ['Mom', 'Dad', 'Kid', 'Gran'].map(player);
   const { code } = await ps[0].emit('room:create', { name: 'Mom' });
@@ -487,6 +523,7 @@ try {
   await wordTest();
   await soloGame();
   await hintTest();
+  await swapTest();
   await teamGame();
   await dropoutTest();
   await drawerGraceTest();

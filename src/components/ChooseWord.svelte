@@ -1,5 +1,5 @@
 <script>
-  import { DIFFICULTY_MULT, TEAMS } from '../../shared/constants.js';
+  import { DIFFICULTY_MULT, SWAP_MIN_POINTS, TEAMS, swapCost } from '../../shared/constants.js';
   import { game, send } from '../lib/game.svelte.js';
   import HideWord from './HideWord.svelte';
 
@@ -9,6 +9,8 @@
   const teams = $derived(s.settings.mode === 'teams');
   const team = $derived(TEAMS[turn.team]);
   const myTeam = $derived(s.players.find((p) => p.id === s.me)?.team);
+  const myScore = $derived(s.players.find((p) => p.id === s.me)?.score ?? 0);
+  const canSwap = $derived(myScore >= SWAP_MIN_POINTS);
   const badge = {
     easy: ['Easy', '#22c55e'],
     medium: ['Medium', '#f59e0b'],
@@ -32,6 +34,15 @@
       {/each}
     </div>
     <p class="auto">Auto-pick in <b>{seconds}s</b></p>
+    <button
+      class="swap"
+      disabled={!canSwap}
+      title={canSwap ? 'Swap these words for new ones' : `You need ${SWAP_MIN_POINTS} points to swap words`}
+      onclick={() => send('words:swap')}
+    >
+      🤷 I don't know these — new words
+      <span>{canSwap ? `−${swapCost(myScore)} pts` : `needs ${SWAP_MIN_POINTS} pts`}</span>
+    </button>
     {#if s.settings.powerUps && s.cards?.reroll > 0 && !turn.cardPlayed && s.cardsLeft > 0}
       <button class="reroll" onclick={() => send('power:use', 'reroll')}>🎲 Reroll words <span>×{s.cards.reroll}</span></button>
     {/if}
@@ -143,6 +154,28 @@
     margin: 0;
     opacity: 0.8;
     font-weight: 700;
+  }
+  .swap {
+    border: 2px solid #fff;
+    background: transparent;
+    color: #fff;
+    border-radius: 999px;
+    padding: 6px 14px;
+    font-weight: 800;
+  }
+  .swap:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.15);
+  }
+  .swap:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .swap span {
+    margin-left: 4px;
+    padding: 1px 8px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.2);
+    font-size: 0.8rem;
   }
   .reroll {
     border: 2px solid #fff;
