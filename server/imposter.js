@@ -1,6 +1,7 @@
 // 🕵️ Imposter: everyone gets the secret word except the imposter(s). Players take turns giving
 // one-word clues, then vote on who's faking it. A caught imposter gets one last chance to
 // guess the word and steal the win.
+import { isCorrect } from './guess.js';
 import { categoryLabel, pickWords } from './words.js';
 
 const GUESS_TIME = 25; // seconds for a caught imposter to guess the word
@@ -71,11 +72,12 @@ export class ImposterGame {
     // Easy/medium words make the best clues (hard ones are too obscure to hint at).
     const difficulty =
       this.settings.difficulty === 'mixed' ? (Math.random() < 0.5 ? 'easy' : 'medium') : this.settings.difficulty;
-    const [choice] = pickWords({ ...this.settings, difficulty, wordChoices: 1 }, room.usedWords, 1);
+    const [choice] = pickWords({ ...this.settings, difficulty, wordChoices: 1 }, room.usedWords, 1, room.memory);
     room.usedWords.add(choice.word.toLowerCase());
 
     this.r = {
       word: choice.word,
+      alts: choice.alts ?? [],
       category: categoryLabel(choice.category),
       imposterIds,
       order,
@@ -132,11 +134,13 @@ export class ImposterGame {
   /** Does `clue` give the secret word away? */
   givesAway(clue) {
     const c = this.normalize(clue).replace(/ /g, '');
-    const w = this.normalize(this.r.word);
     if (!c) return true;
-    if (c === w.replace(/ /g, '')) return true;
-    // The clue contains the word, or a meaningful part of it ("bears" / "bear" for "polar bear").
-    return w.split(' ').some((part) => part.length >= 3 && c.includes(part));
+    return [this.r.word, ...this.r.alts].some((answer) => {
+      const w = this.normalize(answer);
+      if (c === w.replace(/ /g, '')) return true;
+      // The clue contains the word, or a meaningful part of it ("bears" / "bear" for "polar bear").
+      return w.split(' ').some((part) => part.length >= 3 && c.includes(part));
+    });
   }
 
   submitClue(pid, text) {
@@ -186,12 +190,10 @@ export class ImposterGame {
   imposterGuess(pid, text) {
     const r = this.r;
     if (this.room.phase !== 'guess' || !r || pid !== r.accusedId) return;
-    const g = this.normalize(String(text ?? '').slice(0, 40));
-    if (!g) return;
-    const w = this.normalize(r.word);
-    r.guess = String(text).trim().slice(0, 40);
-    const right = g === w || g.replace(/ /g, '') === w.replace(/ /g, '') || ` ${g} `.includes(` ${w} `);
-    this.finish(right ? 'imposterGuessed' : 'caught');
+    const guess = String(text ?? '').slice(0, 40);
+    if (!this.normalize(guess)) return;
+    r.guess = guess.trim();
+    this.finish(isCorrect(guess, r.word, r.alts) ? 'imposterGuessed' : 'caught');
   }
 
   /** outcome: caught | imposterGuessed | wrong | tie | imposterLeft */
@@ -291,8 +293,7 @@ export class ImposterGame {
   filterChat(p, text) {
     const r = this.r;
     if (!r || this.room.phase === 'impReveal' || r.imposterIds.has(p.id)) return false;
-    const w = this.normalize(r.word);
-    if (` ${this.normalize(text)} `.includes(` ${w} `)) {
+    if (isCorrect(text, r.word, r.alts)) {
       this.room.whisper(p.id, "🤫 Don't say the secret word in the chat!");
       return true;
     }

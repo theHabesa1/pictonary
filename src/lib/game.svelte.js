@@ -11,6 +11,7 @@ const PROFILE_KEY = 'pictonary.profile';
 const SESSION_KEY = 'pictonary.session';
 const SEATS_KEY = 'pictonary.seats';
 const MUTED_KEY = 'pictonary.muted';
+const HIDE_KEY = 'pictonary.hideWord';
 const SEAT_TTL = 24 * 60 * 60_000;
 
 // This tab's seat lives in sessionStorage (survives refresh). Every seat is also saved in
@@ -53,6 +54,7 @@ export const game = $state({
   splat: null, // { until, seed } while someone's (secret) 💦 Ink Splat covers our board
   powerToast: null, // { ok, text } private feedback after playing a power-up card
   muted: load(MUTED_KEY, false),
+  hideWord: load(HIDE_KEY, false), // 🙈 keep the word off my screen (someone's sitting next to me)
 });
 setMuted(game.muted);
 
@@ -188,6 +190,11 @@ function rejoin() {
 export function leaveRoom() {
   socket.emit('room:leave');
   resetToHome();
+}
+
+export function toggleHideWord() {
+  game.hideWord = !game.hideWord;
+  save(HIDE_KEY, game.hideWord);
 }
 
 export function toggleMute() {

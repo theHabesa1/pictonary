@@ -148,7 +148,11 @@ choppiness mildness inversion uphill sandblast flophouse roadhouse eatery perfec
 aide grower recruit amphibian broiler galley cooler shinny mound rook shuttle object_ball
 court_tennis real_tennis royal_tennis deck_tennis clock_golf racing_gig slip_carriage
 attack_aircraft rat_cheese water_lemon bell_apple ship_biscuit drawn_butter brown_butter
-brick_cheese orange_toast dry_milk ice_milk fizz potion`.split(/\s+/).map((w) => w.replace(/_/g, ' ')));
+brick_cheese orange_toast dry_milk ice_milk fizz potion
+ashcan assembly circuit compact cursor holder kit overall shook spoke stole starter transit rung
+wrap wrapper trouser lorry delta resort squash cider trifle lark editor printer reactor radar
+filter patch pole rod stand switch trap gear clip disc floppy cattle chapel breeze anorak
+baggage dustbin cassette laser lens transit faucet tank trolley`.split(/\s+/).map((w) => w.replace(/_/g, ' ')));
 
 const BLOCKLIST = new Set([
   ...naughty.en.map((w) => w.toLowerCase()),

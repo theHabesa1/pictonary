@@ -42,6 +42,7 @@ export const CATEGORY_META = [
   { id: 'fantasy', label: 'Fantasy & Fun', emoji: '🧙' },
   { id: 'vehicles', label: 'Vehicles & Tech', emoji: '🚀' },
   { id: 'people', label: 'People & Jobs', emoji: '👩‍🚀' },
+  { id: 'popculture', label: 'Pop Culture', emoji: '🌟' },
 ];
 
 export const DIFFICULTY_MULT = { easy: 1, medium: 1.25, hard: 1.5, custom: 1.25 };

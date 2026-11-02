@@ -238,8 +238,19 @@ async function soloGame() {
   await sleep(SETTLE);
   assert.equal(drawer.ops.length, 0, 'guesser stroke rejected');
 
-  // Wrong guess goes public, close guess gets a hint, right guess is hidden.
+  // Wrong guess goes public, a nearly-right guess only reaches the guesser (and the drawer),
+  // right guess is hidden.
   g1.s.emit('chat', 'definitely not it');
+  if (word.replace(/[^\p{L}]/gu, '').length >= 4) {
+    const near = word.slice(0, -1) + (word.endsWith('x') ? 'y' : 'x');
+    g1.s.emit('chat', near);
+    await waitFor(() => g1.chat.some((m) => m.type === 'close'), 'g1 told the guess was close');
+    await waitFor(() => drawer.chat.some((m) => m.text === near && m.channel === 'close'), 'drawer sees the close guess');
+    assert.ok(g1.chat.some((m) => m.text === near && m.channel === 'close'), 'g1 sees their own close guess');
+    await sleep(SETTLE);
+    assert.ok(!g2.chat.some((m) => m.text === near), 'close guess hidden from other guessers');
+    assert.ok(g2.chat.some((m) => m.text === 'definitely not it'), 'wrong guesses are public');
+  }
   g1.s.emit('chat', word.toUpperCase() + '!!');
   await g1.until((s) => s.players.find((p) => p.id === s.me).guessed, 'g1 guessed');
   assert.ok(g1.state.turn.word === word, 'guesser now sees the word');
@@ -435,6 +446,39 @@ async function wordTest() {
   }
   const animals = poolSize({ ...DEFAULT_SETTINGS, categories: ['animals'], difficulty: 'easy' });
   console.log(`✓ words: ${TOTAL_WORDS} total, 900 offers with no repeats (easy animals: ${animals})`);
+
+  // Aliases, typos and accents.
+  const { isClose, isCorrect } = await import('../server/guess.js');
+  assert.ok(isCorrect('jackson', 'Michael Jackson', ['Jackson']), 'alias counts as correct');
+  assert.ok(isCorrect('spiderman', 'Spider-Man'), 'punctuation ignored');
+  assert.ok(isCorrect('PELE', 'Pelé'), 'accents ignored');
+  assert.ok(isClose('michael', 'Michael Jackson', ['Jackson']), 'part of a name is close');
+  assert.ok(isClose('elefant', 'elephant'), 'a typo is close');
+  assert.ok(!isClose('banana', 'elephant') && !isClose('the', 'Winnie the Pooh'), 'unrelated guesses are not close');
+
+  // Pop culture category.
+  const pop = pickWords({ ...DEFAULT_SETTINGS, categories: ['popculture'], difficulty: 'easy' }, new Set(), 3);
+  assert.ok(pop.length === 3 && pop.every((w) => w.category === 'popculture'), 'pop culture words');
+  assert.ok(pop.every((w) => Array.isArray(w.alts)), 'picks carry their aliases');
+
+  // Rooms share a memory of offered words: a new room doesn't replay the last room's words.
+  const { WordMemory } = await import('../server/words.js');
+  const memory = new WordMemory();
+  const easy = { ...DEFAULT_SETTINGS, difficulty: 'easy' };
+  const easyPool = poolSize(easy);
+  const offered = new Set();
+  for (let room = 0; room < 2; room++) {
+    const roomUsed = new Set();
+    for (let i = 0; i < Math.floor(easyPool / 6); i++) {
+      for (const { word } of pickWords(easy, roomUsed, 3, memory)) {
+        const key = word.toLowerCase();
+        assert.ok(!offered.has(key), `"${word}" offered again in a new room`);
+        offered.add(key);
+        roomUsed.add(key);
+      }
+    }
+  }
+  console.log(`✓ words: ${pop.map((w) => w.word).join(', ')} · ${easyPool} easy words, ${offered.size} offered across 2 rooms with no repeats`);
 }
 
 try {

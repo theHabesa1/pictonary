@@ -54,6 +54,8 @@ async function api(request, env, path) {
   return json(status, data);
 }
 
+const WORDS_KEY = 'recentWords';
+
 export class GameServer extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
@@ -62,6 +64,16 @@ export class GameServer extends DurableObject {
     this.allow = rateLimiter(AUTH_LIMIT.max, AUTH_LIMIT.windowMs);
     this.clock = null;
     this.armedAt = 0;
+    // Which words were offered recently survives restarts, so tomorrow's rooms get fresh ones.
+    // Saved at most every 30 seconds (each save is one storage write).
+    ctx.blockConcurrencyWhile(async () => this.hub.words.load(await ctx.storage.get(WORDS_KEY)));
+    let saveTimer = null;
+    this.hub.words.onChange = () => {
+      saveTimer ??= setTimeout(() => {
+        saveTimer = null;
+        ctx.storage.put(WORDS_KEY, this.hub.words.toJSON()).catch((err) => console.error('[words]', err));
+      }, 30_000);
+    };
   }
 
   /** Sign-up/sign-in rate limit, kept here so every Worker instance shares it. */

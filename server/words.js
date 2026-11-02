@@ -1,6 +1,7 @@
 import { CATEGORY_META, parseCustomWords } from '../shared/constants.js';
 // Thousands more drawable words generated from WordNet + SCOWL (see scripts/build-words.mjs).
 import GENERATED from './wordbank.json' with { type: 'json' };
+import { MORE_WORDS } from './wordlists.js';
 
 // Hand-picked classics, grouped by category and difficulty. These are merged with the
 // generated word bank below and always keep the difficulty given here.
@@ -56,21 +57,26 @@ const DIFFS = ['easy', 'medium', 'hard'];
 
 /** category -> difficulty -> [word]; every word appears once across the whole bank. */
 const WORDS = {};
+/** lowercase word -> other answers that also count ("michael jackson" -> ["Jackson"]) */
+const ALIASES = new Map();
 {
   const seen = new Set();
   const addAll = (source) => {
     for (const { id } of CATEGORY_META) {
       for (const d of DIFFS) {
-        for (const w of source[id]?.[d] ?? []) {
+        for (const entry of source[id]?.[d] ?? []) {
+          const [w, ...alts] = entry.split('|'); // "Display|alias|alias"
           const key = w.toLowerCase();
           if (seen.has(key)) continue;
           seen.add(key);
+          if (alts.length) ALIASES.set(key, alts);
           ((WORDS[id] ??= { easy: [], medium: [], hard: [] })[d]).push(w);
         }
       }
     }
   };
   addAll(HANDPICKED);
+  addAll(MORE_WORDS);
   addAll(GENERATED);
 }
 
@@ -89,6 +95,48 @@ export function poolSize(settings) {
 
 const rand = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
+const MEMORY_DAYS = 90;
+
+/**
+ * When each word was last offered, in any room. Shared by every room on the server, so a new
+ * room tonight doesn't serve up last night's words: words nobody has seen come first, then
+ * the ones seen longest ago. (On Cloudflare it's saved between restarts.)
+ */
+export class WordMemory {
+  constructor() {
+    this.last = new Map(); // lowercase word -> time last offered
+    this.onChange = null;
+  }
+
+  load(saved) {
+    const cutoff = Date.now() - MEMORY_DAYS * 86_400_000;
+    for (const [w, t] of Object.entries(saved ?? {})) if (t > cutoff) this.last.set(w, t);
+  }
+
+  note(word) {
+    this.last.set(word.toLowerCase(), Date.now());
+    this.onChange?.();
+  }
+
+  when(word) {
+    return this.last.get(word.toLowerCase()) ?? 0;
+  }
+
+  toJSON() {
+    const cutoff = Date.now() - MEMORY_DAYS * 86_400_000;
+    for (const [w, t] of this.last) if (t < cutoff) this.last.delete(w);
+    return Object.fromEntries(this.last);
+  }
+}
+
+/** A random pick among the words offered longest ago (never-offered words first). */
+function leastRecent(list, memory) {
+  const byAge = list.map((e) => ({ e, t: memory.when(e.w) })).sort((a, b) => a.t - b.t);
+  const unseen = byAge.filter((x) => x.t === 0);
+  const pool = unseen.length ? unseen : byAge.slice(0, Math.max(1, Math.ceil(byAge.length / 10)));
+  return rand(pool).e;
+}
+
 /** "🐾 Animals" — shown by the 🔍 Category Clue card. */
 export function categoryLabel(id) {
   if (id === 'custom') return '✏️ Custom words';
@@ -106,10 +154,11 @@ function poolFor(categories, difficulty) {
 
 /**
  * Pick `count` word options for the drawer.
- * Returns [{ word, difficulty }]. `used` is a Set of lowercase words this room has already
- * seen (offered or played); they're only repeated once a pool runs out.
+ * Returns [{ word, difficulty, category, alts }]. `used` is a Set of lowercase words this room
+ * has already seen (offered or played); they're only repeated once a pool runs out. `memory`
+ * (a WordMemory) steers picks away from words other rooms saw recently.
  */
-export function pickWords(settings, used, count) {
+export function pickWords(settings, used, count, memory = null) {
   const custom = parseCustomWords(settings.customWords);
   const picked = [];
   const taken = new Set();
@@ -118,9 +167,11 @@ export function pickWords(settings, used, count) {
     let fresh = pool.filter((e) => !used.has(e.w.toLowerCase()) && !taken.has(e.w.toLowerCase()));
     if (!fresh.length) fresh = pool.filter((e) => !taken.has(e.w.toLowerCase()));
     if (!fresh.length) return false;
-    const { w: word, c: category } = rand(fresh);
+    const fromBank = difficulty !== 'custom';
+    const { w: word, c: category } = memory && fromBank ? leastRecent(fresh, memory) : rand(fresh);
     taken.add(word.toLowerCase());
-    picked.push({ word, difficulty, category });
+    if (fromBank) memory?.note(word);
+    picked.push({ word, difficulty, category, alts: ALIASES.get(word.toLowerCase()) ?? [] });
     return true;
   };
   const customPool = custom.map((w) => ({ w, c: 'custom' }));

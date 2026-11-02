@@ -11,8 +11,10 @@ Built with **Svelte 5** + **Vite** on the front end and plain **WebSockets** for
   - 👨‍👩‍👧‍👦 **Teams** (2–4 teams): teams take turns. Your teammates guess your drawing. Optional **steals** let other teams guess first and take the points.
 - 💡 **Letter hints**: as the clock runs down, random letters of the word are revealed (0–5 hints, set by the host). Works in both modes.
 - 🖌️ **Drawing tools**: 20 colors plus a custom color picker, 5 brush sizes, eraser, fill bucket, undo, and clear. Keyboard shortcuts `B` `E` `F` `1-5` `Ctrl+Z`.
-- 🎯 3 word choices per turn (easy / medium / hard; harder words are worth more), **2,400+ family-friendly words** in 9 categories, plus **custom words** in any language. Words aren't repeated within a room until the pool runs out.
-- 🔥 "So close!" hints for near-miss guesses. Correct guesses are hidden, and players who already guessed chat privately.
+- 🎯 3 word choices per turn (easy / medium / hard; harder words are worth more), **3,300+ family-friendly words** in 10 categories, plus **custom words** in any language. **🌟 Pop Culture** covers people, characters, films and places known all over the world: Michael Jackson, Messi, Pikachu, the Eiffel Tower… Famous names also accept the surname ("Jackson").
+- ♻️ Words don't repeat: not within a room, and not from one room to the next. The server remembers what every room was offered and serves the least-recently-seen words first.
+- 🔥 "So close!" hints for near-miss guesses. Close guesses stay out of the public chat (only the guesser and the players who already know the word see them), correct guesses are hidden, and players who already guessed chat privately.
+- 🙈 **Hide the word**: the drawer and players who already guessed can blank the word on their own screen, so someone sitting next to them can't peek. Hidden word choices and secret chat are blurred until pressed.
 - 😂 Live emoji reactions, sound effects, a podium with confetti, and a team scoreboard.
 - 📱 Works on phones, tablets and desktop. If you refresh or your Wi-Fi drops, you rejoin with your points intact.
 - 👑 Host controls: settings, kick, skip turn, end game. If the host leaves, host passes to another player automatically.
@@ -63,7 +65,7 @@ To try it in Cloudflare's runtime instead: put `DATABASE_URL=…` in a `.dev.var
 - **[SCOWL](http://wordlist.aspell.net/)** word-frequency lists: these drop obscure words and set easy, medium and hard.
 - **[LDNOOBW](https://github.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words)**, plus our own blocklist, keeps it family-friendly.
 
-The hand-picked lists in `server/words.js` are merged on top. To tweak the rules, edit the script and re-run it. The dictionary packages are dev-only, so deploys don't install them.
+The hand-picked lists in `server/words.js` and `server/wordlists.js` (including Pop Culture; `"Name|alias"` adds answers that also count) are merged on top. To tweak the rules, edit the script and re-run it. The dictionary packages are dev-only, so deploys don't install them.
 
 ## Deploy (free)
 

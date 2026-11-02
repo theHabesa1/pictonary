@@ -7,7 +7,9 @@
 //   server → client  [event, data]             replies to an ack: ['ack', ackId, data]
 import crypto from 'node:crypto';
 import { userFromToken } from './accounts.js';
+import { hasDb } from './db.js';
 import { Room, uid } from './room.js';
+import { WordMemory } from './words.js';
 import { sanitizeSettings } from '../shared/constants.js';
 
 const PING_EVERY = 10_000; // ping a quiet connection this often…
@@ -122,6 +124,7 @@ export class Hub {
     /** @type {Map<string, Set<Socket>>} room code -> sockets in it */
     this.groups = new Map();
     this.startedAt = new Date();
+    this.words = new WordMemory(); // recently offered words, across all rooms
     // What Room expects from Socket.IO's server object.
     this.io = { sockets: { sockets: this.sockets }, to: (target) => this.to(target) };
   }
@@ -157,6 +160,8 @@ export class Hub {
       ok: true,
       rooms: this.rooms.size,
       players: this.sockets.size,
+      accounts: hasDb(), // false = no database set up: everyone plays as a guest
+      wordsRemembered: this.words.last.size,
       upSince: this.startedAt.toISOString(),
       uptimeMin: Math.round((Date.now() - this.startedAt) / 60_000),
     };
@@ -217,7 +222,7 @@ export class Hub {
     on('room:create', (data, ack) => {
       data ??= {};
       leaveCurrent();
-      const r = new Room(this.io, this.newCode());
+      const r = new Room(this.io, this.newCode(), this.words);
       // The game picked on the home page.
       r.settings = sanitizeSettings({ game: data.game }, r.settings);
       rooms.set(r.code, r);

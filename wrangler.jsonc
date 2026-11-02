@@ -19,5 +19,7 @@
     "bindings": [{ "name": "GAME", "class_name": "GameServer" }]
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["GameServer"] }],
+  // Deploys keep variables added in the dashboard (secrets are always kept).
+  "keep_vars": true,
   "observability": { "enabled": true }
 }

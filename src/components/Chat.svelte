@@ -63,12 +63,15 @@
   <ul class="msgs scroll-thin" bind:this={list} onscroll={onScroll} aria-live="polite">
     {#each game.messages as m (m.id)}
       {#if m.type === 'chat'}
-        <li class="msg" class:secret={m.channel === 'guessed'} class:mine={m.pid === s?.me}>
+        {@const knowing = m.channel === 'guessed' || m.channel === 'close'}
+        <li class="msg" class:secret={m.channel === 'guessed'} class:near={m.channel === 'close'} class:mine={m.pid === s?.me}>
           <span class="av">{m.avatar}</span>
           <span class="body">
             <b style:color={teams ? TEAMS[m.team]?.color : null}>{m.name}</b>
             {#if m.channel === 'guessed'}<span class="lock" title="Only visible to players who know the word">🤫</span>{/if}
-            <span class="txt">{m.text}</span>
+            {#if m.channel === 'close'}<span class="lock" title="Very close! Hidden from the other guessers">🔥</span>{/if}
+            <!-- 🙈 hide mode: anything that could give the word away is blurred until pressed -->
+            <span class="txt" class:blur={knowing && game.hideWord}>{m.text}</span>
           </span>
         </li>
       {:else}
@@ -159,6 +162,17 @@
   }
   .msg.secret {
     background: var(--green-soft);
+  }
+  .msg.near {
+    background: #ffedd5;
+  }
+  .txt.blur {
+    filter: blur(5px);
+    transition: filter 0.15s;
+  }
+  .msg:hover .txt.blur,
+  .msg:active .txt.blur {
+    filter: none;
   }
   .av {
     flex: none;

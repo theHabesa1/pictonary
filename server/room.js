@@ -5,6 +5,7 @@ import {
 } from '../shared/constants.js';
 import { CARDS_PER_GAME, EXTRA_TIME_SECONDS, POWERUPS, SPLAT_MS } from '../shared/powerups.js';
 import { getInventory, recordGame, refundCard, useCard } from './accounts.js';
+import { isClose, isCorrect, normalize } from './guess.js';
 import { categoryLabel, pickWords, poolSize } from './words.js';
 import { ImposterGame } from './imposter.js';
 import { CardGame } from './cards.js';
@@ -30,31 +31,6 @@ const shuffle = (arr) => {
   return arr;
 };
 
-export function normalize(s) {
-  return String(s)
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function levenshtein(a, b) {
-  if (Math.abs(a.length - b.length) > 2) return 3;
-  const prev = Array.from({ length: b.length + 1 }, (_, i) => i);
-  for (let i = 1; i <= a.length; i++) {
-    let diag = prev[0];
-    prev[0] = i;
-    for (let j = 1; j <= b.length; j++) {
-      const tmp = prev[j];
-      prev[j] = Math.min(prev[j] + 1, prev[j - 1] + 1, diag + (a[i - 1] === b[j - 1] ? 0 : 1));
-      diag = tmp;
-    }
-  }
-  return prev[b.length];
-}
-
 export function cleanName(name) {
   const n = String(name ?? '').replace(/\s+/g, ' ').trim().slice(0, 20);
   return n || 'Player';
@@ -78,9 +54,10 @@ function cleanPoints(arr, max) {
 }
 
 export class Room {
-  constructor(io, code) {
+  constructor(io, code, memory = null) {
     this.io = io;
     this.code = code;
+    this.memory = memory; // WordMemory shared by every room, so new rooms get fresh words too
     this.players = new Map(); // id -> player
     this.byToken = new Map(); // secret token -> player
     this.hostId = null;
@@ -380,7 +357,7 @@ export class Room {
     if (!drawer) return this.endGame();
 
     const now = Date.now();
-    const choices = pickWords(this.settings, this.usedWords, this.settings.wordChoices);
+    const choices = pickWords(this.settings, this.usedWords, this.settings.wordChoices, this.memory);
     // Offered-but-not-chosen words count as seen too, so the same options don't keep coming back.
     for (const c of choices) this.usedWords.add(c.word.toLowerCase());
     this.phase = 'choosing';
@@ -426,6 +403,7 @@ export class Room {
     const duration = this.settings.drawTime;
 
     t.word = choice.word;
+    t.alts = choice.alts ?? []; // other answers that also count (never sent to guessers)
     t.difficulty = choice.difficulty;
     t.category = choice.category;
     t.startedAt = now;
@@ -709,7 +687,7 @@ export class Room {
         t.doubles.add(p.id);
         break;
       case 'reroll':
-        t.choices = pickWords(this.settings, this.usedWords, this.settings.wordChoices);
+        t.choices = pickWords(this.settings, this.usedWords, this.settings.wordChoices, this.memory);
         for (const c of t.choices) this.usedWords.add(c.word.toLowerCase());
         t.endsAt = Date.now() + CHOOSE_TIME * 1000;
         t.duration = CHOOSE_TIME;
@@ -836,20 +814,17 @@ export class Room {
       if (p.id === t.drawerId || t.guessed.has(p.id)) {
         return this.sendToKnowers({ ...base, channel: 'guessed' });
       }
-      const g = normalize(msg);
-      const w = normalize(t.word);
-      const correct = g === w || g.replace(/ /g, '') === w.replace(/ /g, '') || ` ${g} `.includes(` ${w} `);
-      if (correct) {
+      if (isCorrect(msg, t.word, t.alts)) {
         if (this.canGuess(p)) return this.correctGuess(p);
         return this.whisper(pid, "🤫 That's it! But it's not your team's turn — keep it secret!");
       }
-      this.publish(base);
-      const a = g.replace(/ /g, '');
-      const b = w.replace(/ /g, '');
-      if (this.canGuess(p) && a.length >= 3 && levenshtein(a, b) <= (b.length >= 7 ? 2 : 1)) {
-        this.whisper(pid, `🔥 "${msg}" is very close!`, 'close');
+      // A nearly-right guess would help everyone else, so only the guesser (and players who
+      // already know the word) see it.
+      if (isClose(msg, t.word, t.alts)) {
+        this.sendToKnowers({ ...base, channel: 'close' }, p.id);
+        return this.whisper(pid, '🔥 So close! Only you can see that guess.', 'close');
       }
-      return;
+      return this.publish(base);
     }
     this.publish(base);
   }
@@ -877,10 +852,11 @@ export class Room {
     if (sid) this.io.to(sid).emit('chat', { id: uid(6), type, text });
   }
 
-  sendToKnowers(msg) {
+  /** Send to the drawer and everyone who guessed the word (plus `alsoTo`, a player id). */
+  sendToKnowers(msg, alsoTo = null) {
     const t = this.turn;
     for (const p of this.players.values()) {
-      if (p.socketId && (p.id === t.drawerId || t.guessed.has(p.id))) this.io.to(p.socketId).emit('chat', msg);
+      if (p.socketId && (p.id === t.drawerId || t.guessed.has(p.id) || p.id === alsoTo)) this.io.to(p.socketId).emit('chat', msg);
     }
   }
 

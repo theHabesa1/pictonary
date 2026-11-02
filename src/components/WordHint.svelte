@@ -1,5 +1,7 @@
 <script>
   import { TEAMS } from '../../shared/constants.js';
+  import { game } from '../lib/game.svelte.js';
+  import HideWord from './HideWord.svelte';
 
   let { state: s, drawer, isDrawer } = $props();
 
@@ -21,6 +23,8 @@
   const shownWord = $derived(turn?.reveal?.word ?? turn?.word ?? '');
   // Letter count drives the size: the blanks always fit the available width.
   const n = $derived(Math.max(5, mask.length || Array.from(shownWord).length));
+  // 🙈 hidden: dots instead of letters, so someone looking over your shoulder learns nothing.
+  const dots = (word) => Array.from(word).map((c) => (c === ' ' ? ' ' : '•')).join('');
 </script>
 
 <div class="hint" style:--n={n}>
@@ -29,11 +33,11 @@
     <span class="msg">{isDrawer ? '✏️ Pick a word to draw' : `✏️ ${drawer?.name ?? 'Someone'} is choosing`}</span>
   {:else if s.phase === 'drawing' && turn}
     {#if isDrawer}
-      <span class="lbl">Draw this</span>
-      <span class="word">{turn.word}</span>
+      <span class="lbl">Draw this <HideWord /></span>
+      <span class="word" class:hidden={game.hideWord}>{game.hideWord ? dots(turn.word) : turn.word}</span>
     {:else if me?.guessed}
-      <span class="lbl ok">You got it! 🎉</span>
-      <span class="word ok">{turn.word}</span>
+      <span class="lbl ok">You got it! 🎉 <HideWord /></span>
+      <span class="word ok" class:hidden={game.hideWord}>{game.hideWord ? dots(turn.word) : turn.word}</span>
     {:else}
       <span class="lbl">
         <span class="lbl-text">
@@ -151,6 +155,10 @@
   }
   .word.ok {
     color: #15803d;
+  }
+  .word.hidden {
+    letter-spacing: 0.12em;
+    color: var(--muted);
   }
   .slots {
     --size: max(0.85rem, min(1.7rem, calc(100cqi / (var(--n) * 1.2))));

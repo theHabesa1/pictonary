@@ -1,6 +1,7 @@
 <script>
   import { DIFFICULTY_MULT, TEAMS } from '../../shared/constants.js';
   import { game, send } from '../lib/game.svelte.js';
+  import HideWord from './HideWord.svelte';
 
   let { turn, drawer, isDrawer, seconds } = $props();
 
@@ -19,8 +20,9 @@
 <div class="overlay">
   {#if isDrawer && turn.choices}
     <h2>✏️ Your turn to draw!</h2>
-    <p class="sub">Pick a word — harder words are worth more points</p>
-    <div class="choices">
+    <p class="sub">Pick a word — harder words are worth more points <HideWord light /></p>
+    {#if game.hideWord}<p class="peek-tip">🙈 Words hidden — hold a card to peek</p>{/if}
+    <div class="choices" class:hidden={game.hideWord}>
       {#each turn.choices as c, i}
         {@const [label, color] = badge[c.difficulty] ?? badge.medium}
         <button class="choice" style:--c={color} style:animation-delay="{i * 0.07}s" onclick={() => send('word:choose', i)}>
@@ -106,6 +108,22 @@
   }
   .choice:hover {
     transform: translateY(-4px) rotate(-1.5deg);
+  }
+  /* 🙈 hidden: blurred until you hover or press-and-hold a card */
+  .hidden .w {
+    filter: blur(9px);
+    transition: filter 0.15s;
+  }
+  .hidden .choice:hover .w,
+  .hidden .choice:active .w,
+  .hidden .choice:focus-visible .w {
+    filter: none;
+  }
+  .peek-tip {
+    margin: 0;
+    font-size: 0.85rem;
+    font-weight: 700;
+    opacity: 0.85;
   }
   .w {
     font-family: var(--font-display);
