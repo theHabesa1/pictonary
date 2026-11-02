@@ -157,7 +157,7 @@
         <h2 id="guide-title">🎨 How to play Pictonary</h2>
         <div class="goal"><b>The idea:</b> take turns drawing a word while everyone else races to guess it.</div>
         <ol class="steps">
-          <li><span class="num">1</span><div><h3>✏️ Pick a word</h3><p>When it's your turn, choose one of the words. Harder words are worth more points. Don't know any of them? Swap them for new ones (costs 40% of your points, once you have 100).</p></div></li>
+          <li><span class="num">1</span><div><h3>✏️ Pick a word</h3><p>When it's your turn, choose one of the words. Harder words are worth more points. Don't know any of them? Swap them for new ones (costs 120 points, once you have that many).</p></div></li>
           <li><span class="num">2</span><div><h3>🖌️ Draw it</h3><p>Use colors, brush sizes, the fill bucket and undo. No writing letters or numbers!</p></div></li>
           <li><span class="num">3</span><div><h3>💬 Guess in the chat</h3><p>Type your guesses. Faster guesses score more, and the drawer scores when people get it. As time runs down, letters of the word appear as hints.</p></div></li>
           <li><span class="num">4</span><div><h3>👨‍👩‍👧‍👦 Teams mode</h3><p>Your team guesses your drawing. If the host allows steals, other teams can guess first and take the points!</p></div></li>

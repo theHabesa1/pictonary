@@ -1,5 +1,5 @@
 <script>
-  import { DIFFICULTY_MULT, SWAP_MIN_POINTS, TEAMS, swapCost } from '../../shared/constants.js';
+  import { DIFFICULTY_MULT, SWAP_COST, TEAMS } from '../../shared/constants.js';
   import { game, send } from '../lib/game.svelte.js';
   import HideWord from './HideWord.svelte';
 
@@ -10,7 +10,7 @@
   const team = $derived(TEAMS[turn.team]);
   const myTeam = $derived(s.players.find((p) => p.id === s.me)?.team);
   const myScore = $derived(s.players.find((p) => p.id === s.me)?.score ?? 0);
-  const canSwap = $derived(myScore >= SWAP_MIN_POINTS);
+  const canSwap = $derived(myScore >= SWAP_COST);
   const badge = {
     easy: ['Easy', '#22c55e'],
     medium: ['Medium', '#f59e0b'],
@@ -37,11 +37,11 @@
     <button
       class="swap"
       disabled={!canSwap}
-      title={canSwap ? 'Swap these words for new ones' : `You need ${SWAP_MIN_POINTS} points to swap words`}
+      title={canSwap ? 'Swap these words for new ones' : `You need ${SWAP_COST} points to swap words`}
       onclick={() => send('words:swap')}
     >
       🤷 I don't know these — new words
-      <span>{canSwap ? `−${swapCost(myScore)} pts` : `needs ${SWAP_MIN_POINTS} pts`}</span>
+      <span>{canSwap ? `−${SWAP_COST} pts` : `needs ${SWAP_COST} pts`}</span>
     </button>
     {#if s.settings.powerUps && s.cards?.reroll > 0 && !turn.cardPlayed && s.cardsLeft > 0}
       <button class="reroll" onclick={() => send('power:use', 'reroll')}>🎲 Reroll words <span>×{s.cards.reroll}</span></button>

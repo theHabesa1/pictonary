@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import WebSocket from 'ws';
 import { createSocket, socketUrl } from '../src/lib/socket.js';
-import { SWAP_MIN_POINTS, canPlayCard, swapCost } from '../shared/constants.js';
+import { SWAP_COST, canPlayCard } from '../shared/constants.js';
 
 const URL = process.env.URL || 'http://localhost:3000';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -399,7 +399,7 @@ async function hintTest() {
 }
 
 async function swapTest() {
-  // 🤷 "I don't know these words": new choices for 40% of the drawer's points, once they have enough.
+  // 🤷 "I don't know these words": new choices for SWAP_COST points, once the drawer has enough.
   const a = player('Ola');
   const b = player('Pia');
   const { code } = await a.emit('room:create', { name: 'Ola' });
@@ -422,12 +422,12 @@ async function swapTest() {
   second.s.emit('chat', first.state.turn.word);
   await second.until((s) => s.phase === 'choosing' && s.turn.drawerId === s.me && s.turn.choices, 'second drawer picking', 15000);
   const score = second.state.players.find((p) => p.id === second.state.me).score;
-  assert.ok(score >= SWAP_MIN_POINTS, 'enough points to swap');
+  assert.ok(score >= SWAP_COST, 'enough points to swap');
   const old = second.state.turn.choices.map((c) => c.word);
   second.s.emit('words:swap');
   await second.until((s) => s.turn.choices?.every((c) => !old.includes(c.word)), 'new word choices');
   const after = second.state.players.find((p) => p.id === second.state.me).score;
-  assert.equal(after, score - swapCost(score), 'paid 40% of their points');
+  assert.equal(after, score - SWAP_COST, `paid ${SWAP_COST} points`);
   await waitFor(() => first.chat.some((m) => m.text?.includes("didn't know those words")), 'everyone told about the swap');
   console.log(`✓ swap words: refused at 0 points, then ${old.join(' / ')} swapped for ${score - after} of ${score} points`);
   a.s.disconnect();

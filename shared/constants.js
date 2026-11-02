@@ -5,10 +5,9 @@ export const CANVAS_H = 900;
 
 export const MAX_PLAYERS = 16;
 export const CHOOSE_TIME = 15; // seconds the drawer has to pick a word
-// 🤷 "I don't know these words": the drawer can swap the word choices for new ones. It costs 40%
-// of their points, so it's only allowed once they have some points to pay with.
-export const SWAP_MIN_POINTS = 100;
-export const swapCost = (score) => Math.max(5, Math.round((score * 0.4) / 5) * 5);
+// 🤷 "I don't know these words": the drawer can swap the word choices for new ones, for this many
+// points. Only allowed once they have enough points to pay with.
+export const SWAP_COST = 120;
 export const TURN_END_TIME = 7; // seconds the answer is shown between turns
 
 export const TEAMS = [

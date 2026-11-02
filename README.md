@@ -13,7 +13,7 @@ Built with **Svelte 5** + **Vite** on the front end and plain **WebSockets** for
 - 🖌️ **Drawing tools**: 20 colors plus a custom color picker, 5 brush sizes, eraser, fill bucket, undo, and clear. Keyboard shortcuts `B` `E` `F` `1-5` `Ctrl+Z`.
 - 🎯 3 word choices per turn (easy / medium / hard; harder words are worth more), **3,300+ family-friendly words** in 10 categories, plus **custom words** in any language. **🌟 Pop Culture** covers people, characters, films and places known all over the world: Michael Jackson, Messi, Pikachu, the Eiffel Tower… Famous names also accept the surname ("Jackson").
 - ♻️ Words don't repeat: not within a room, and not from one room to the next. The server remembers what every room was offered and serves the least-recently-seen words first.
-- 🤷 **Don't know the words?** The drawer can swap the choices for new ones, for 40% of their points (once they have 100).
+- 🤷 **Don't know the words?** The drawer can swap the choices for new ones, for 120 points (once they have that many).
 - 🔥 "So close!" hints for near-miss guesses. A guess that matches 60% of the word's letters is only shown to the player who typed it, correct guesses are hidden, and players who already guessed chat privately.
 - 🙈 **Hide the word**: the drawer and players who already guessed can blank the word on their own screen, so someone sitting next to them can't peek. Hidden word choices and secret chat are blurred until pressed.
 - 😂 Live emoji reactions, sound effects, a podium with confetti, and a team scoreboard.

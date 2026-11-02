@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import {
   AVATARS, CANVAS_H, CANVAS_W, CHOOSE_TIME, DEFAULT_SETTINGS, DIFFICULTY_MULT, MAX_PLAYERS,
-  REACTIONS, SWAP_MIN_POINTS, TEAMS, TURN_END_TIME, gameInfo, isGuessChar, isTeams, sanitizeSettings, swapCost,
+  REACTIONS, SWAP_COST, TEAMS, TURN_END_TIME, gameInfo, isGuessChar, isTeams, sanitizeSettings,
 } from '../shared/constants.js';
 import { CARDS_PER_GAME, EXTRA_TIME_SECONDS, POWERUPS, SPLAT_MS } from '../shared/powerups.js';
 import { getInventory, recordGame, refundCard, useCard } from './accounts.js';
@@ -387,22 +387,21 @@ export class Room {
     this.broadcast();
   }
 
-  /** 🤷 The drawer doesn't know any of the words: new choices, for 40% of their points. */
+  /** 🤷 The drawer doesn't know any of the words: new choices, for SWAP_COST points. */
   swapWords(pid) {
     const t = this.turn;
     const p = this.players.get(pid);
     if (this.phase !== 'choosing' || !t || t.drawerId !== pid || !p) return;
-    if (p.score < SWAP_MIN_POINTS) {
-      return this.whisper(pid, `🤷 New words cost 40% of your points — you need ${SWAP_MIN_POINTS} points first.`);
+    if (p.score < SWAP_COST) {
+      return this.whisper(pid, `🤷 New words cost ${SWAP_COST} points — you need more points first.`);
     }
-    const cost = swapCost(p.score);
-    p.score -= cost;
-    if (this.settings.mode === 'teams') this.teamScores[p.team] = Math.max(0, this.teamScores[p.team] - cost);
+    p.score -= SWAP_COST;
+    if (this.settings.mode === 'teams') this.teamScores[p.team] = Math.max(0, this.teamScores[p.team] - SWAP_COST);
     t.choices = pickWords(this.settings, this.usedWords, this.settings.wordChoices, this.memory);
     for (const c of t.choices) this.usedWords.add(c.word.toLowerCase());
     t.endsAt = Date.now() + CHOOSE_TIME * 1000;
     t.duration = CHOOSE_TIME;
-    this.system(`🤷 ${p.name} didn't know those words and got new ones (−${cost} points)`);
+    this.system(`🤷 ${p.name} didn't know those words and got new ones (−${SWAP_COST} points)`);
     this.broadcast();
   }
 

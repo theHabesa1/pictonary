@@ -30,7 +30,7 @@ export const RELEASES = [
       {
         emoji: '🤷',
         title: "Don't know the words?",
-        text: 'Swap them for new ones while you pick. It costs 40% of your points, and you need 100 points first.',
+        text: 'Swap them for new ones while you pick. It costs 120 points, so you need at least 120 first.',
       },
       {
         emoji: '⚡',
