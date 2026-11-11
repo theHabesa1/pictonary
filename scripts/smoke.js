@@ -465,6 +465,50 @@ async function teamGame() {
   for (const p of ps) p.s.disconnect();
 }
 
+async function adminPeekTest() {
+  // 👑 Only the admin account (Yared) is ever sent the answer, and nobody else is told.
+  const { isAdmin } = await import('../server/accounts.js');
+  const { useDb } = await import('../server/db.js');
+  const { Room } = await import('../server/room.js');
+  assert.ok(isAdmin({ username: 'Yared' }) && isAdmin({ username: 'yared' }), 'Yared is the admin');
+  assert.ok(!isAdmin({ username: 'Yared2' }) && !isAdmin({ username: 'Sam' }) && !isAdmin(null), 'nobody else is');
+
+  // Drive a room directly (no server needed), with an empty stand-in database for card lookups.
+  useDb({ query: async () => ({ rows: [] }), schema: async () => {} });
+  const sent = []; // every message sent to anyone
+  const io = { sockets: { sockets: new Map() }, to: (to) => ({ emit: (ev, data) => sent.push({ to, ev, data }) }) };
+  const socket = (id, user) => ({ id, data: { user }, join() {}, leave() {}, emit: (ev, data) => sent.push({ to: id, ev, data }) });
+  const room = new Room(io, 'ADMIN');
+  const host = room.join(socket('s-host', null), { name: 'Host' });
+  const sam = room.join(socket('s-sam', { id: 98, username: 'Sam', level: 1 }), { name: 'Sam' });
+  const yared = room.join(socket('s-yared', { id: 4, username: 'Yared', level: 1 }), { name: 'Yared' });
+  room.start(host.id);
+  if (room.turn.drawerId === yared.id) {
+    // Yared draws first (and knows the word anyway): move on to someone else's turn.
+    room.chooseWord(yared.id, 0);
+    room.endTurn('time');
+    room.tick(Date.now() + 60_000);
+  }
+  room.chooseWord(room.turn.drawerId, 0);
+  const word = room.turn.word;
+  const view = (pid) => room.snapshot(room.players.get(pid)).turn;
+  assert.equal(view(yared.id).answer, word, 'the admin can peek at the answer');
+  assert.equal(view(yared.id).word, null, "peeking doesn't count as guessing it");
+  for (const pid of [host.id, sam.id]) assert.equal(view(pid).answer, null, 'nobody else gets the answer');
+
+  // Nothing ever told anyone else: no admin flag in the player list, and the word only ever
+  // went to the drawer and Yared.
+  const drawerSocket = room.players.get(room.turn.drawerId).socketId;
+  assert.ok(room.snapshot(room.players.get(sam.id)).players.every((p) => !('admin' in p)), 'admin is secret');
+  const leaks = sent.filter((m) => ![drawerSocket, 's-yared'].includes(m.to) && JSON.stringify(m.data ?? '').includes(word));
+  assert.deepEqual(leaks, [], 'the word was never sent to anyone else');
+
+  // Once Yared guesses it, it's a normal correct guess.
+  room.chat(yared.id, word);
+  assert.ok(view(yared.id).word === word && view(yared.id).answer === null, 'admin guessed it');
+  console.log(`✓ admin peek: only Yared sees "${word}", nobody else is sent it or told`);
+}
+
 async function wordTest() {
   // Big word bank, and no word is offered twice until the pool runs out.
   const { pickWords, TOTAL_WORDS, poolSize } = await import('../server/words.js');
@@ -521,6 +565,7 @@ async function wordTest() {
 
 try {
   await wordTest();
+  await adminPeekTest();
   await soloGame();
   await hintTest();
   await swapTest();

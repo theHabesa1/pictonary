@@ -4,7 +4,7 @@ import {
   REACTIONS, SWAP_COST, TEAMS, TURN_END_TIME, gameInfo, isGuessChar, isTeams, sanitizeSettings,
 } from '../shared/constants.js';
 import { CARDS_PER_GAME, EXTRA_TIME_SECONDS, POWERUPS, SPLAT_MS } from '../shared/powerups.js';
-import { getInventory, recordGame, refundCard, useCard } from './accounts.js';
+import { getInventory, isAdmin, recordGame, refundCard, useCard } from './accounts.js';
 import { isClose, isCorrect, normalize } from './guess.js';
 import { categoryLabel, pickWords, poolSize } from './words.js';
 import { ImposterGame } from './imposter.js';
@@ -140,6 +140,7 @@ export class Room {
         lastReact: 0,
         userId: null,
         level: null,
+        admin: false, // 👑 the game's admin: can secretly peek at the answer
         cards: {}, // power-up inventory (signed-in players)
         cardsUsed: 0, // cards played this game
         correct: 0, // correct guesses this game
@@ -152,6 +153,7 @@ export class Room {
     // Link (or unlink) the seat to the account the player is signed in with.
     p.userId = user?.id ?? null;
     p.level = user?.level ?? null;
+    p.admin = isAdmin(user);
     if (!user) p.cards = {};
     else this.refreshCards(p.id);
 
@@ -599,6 +601,7 @@ export class Room {
     if (!p) return;
     p.userId = user?.id ?? null;
     p.level = user?.level ?? null;
+    p.admin = isAdmin(user);
     p.cards = {};
     if (user) this.refreshCards(pid);
     this.broadcast();
@@ -949,6 +952,8 @@ export class Room {
         duration: t.duration,
         choices: isDrawer && this.phase === 'choosing' ? t.choices : null,
         word: knows ? t.word : null,
+        // 👑 Only ever sent to the admin, and nobody else is told.
+        answer: me.admin && !knows ? t.word : null,
         mask: t.word ? Array.from(t.word).map((c, i) => (isGuessChar(c) && !revealed.has(i) ? null : c)) : null,
         difficulty: t.word ? t.difficulty : null,
         hintsGiven: t.revealed.length,

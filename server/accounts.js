@@ -38,6 +38,10 @@ async function checkPassword(password, stored) {
 const DUMMY_HASH =
   'scrypt$X85NT3NwAiVXEre938WwsQ==$zL0zdw4nh5huYKx3DCWT0OjFGIIKkkXFEZprpWaXpgpnqwvBduICZxCK884AqSipkxa7B3DJZPHEfVIcVo9MqA==';
 
+// 👑 The game's admin: only this account can secretly peek at the answer.
+const ADMIN = 'yared';
+export const isAdmin = (user) => user?.username.toLowerCase() === ADMIN;
+
 export function publicUser(row) {
   return {
     id: row.id,

@@ -25,6 +25,11 @@
   const n = $derived(Math.max(5, mask.length || Array.from(shownWord).length));
   // 🙈 hidden: dots instead of letters, so someone looking over your shoulder learns nothing.
   const dots = (word) => Array.from(word).map((c) => (c === ' ' ? ' ' : '•')).join('');
+  // 👑 Admin peek: the server only sends `answer` to the admin. Tap 🕹️ to see it in the blanks;
+  // it hides again when the next turn starts, and nobody else is told.
+  let peekTurn = $state(null);
+  const peeking = $derived(!!turn?.answer && peekTurn === turn.id);
+  const answer = $derived(Array.from(turn?.answer ?? ''));
 </script>
 
 <div class="hint" style:--n={n}>
@@ -39,6 +44,16 @@
       <span class="lbl ok">You got it! 🎉 <HideWord /></span>
       <span class="word ok" class:hidden={game.hideWord}>{game.hideWord ? dots(turn.word) : turn.word}</span>
     {:else}
+      {#if turn.answer}
+        <button
+          type="button"
+          class="peek"
+          class:on={peeking}
+          aria-pressed={peeking}
+          aria-label="Peek"
+          onclick={() => (peekTurn = peeking ? null : turn.id)}>🕹️</button
+        >
+      {/if}
       <span class="lbl">
         <span class="lbl-text">
           {#if s.settings.mode === 'teams' && !turn.canGuess}
@@ -61,7 +76,7 @@
           {#if ch === ' '}
             <span class="gap"></span>
           {:else if ch === null}
-            <span class="slot"></span>
+            <span class="slot" class:ghost={peeking}>{peeking ? answer[i] : ''}</span>
           {:else}
             {#key ch}<span class="slot shown">{ch}</span>{/key}
           {/if}
@@ -80,6 +95,7 @@
 
 <style>
   .hint {
+    position: relative;
     container-type: inline-size;
     width: 100%;
     display: flex;
@@ -186,6 +202,25 @@
   }
   .gap {
     width: calc(var(--size) * 0.6);
+  }
+  .peek {
+    position: absolute;
+    top: 0;
+    left: 0;
+    border: none;
+    background: none;
+    padding: 0;
+    font-size: 0.75rem;
+    line-height: 1;
+    opacity: 0.2;
+    cursor: pointer;
+  }
+  .peek:hover,
+  .peek.on {
+    opacity: 1;
+  }
+  .slot.ghost {
+    color: #b8a5f5;
   }
   @container (max-width: 260px) {
     .lbl {
