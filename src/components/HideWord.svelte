@@ -1,20 +1,21 @@
 <script>
   // 🙈 / 👁 toggle for the word on your own screen (handy when someone's sitting next to you).
-  // The choice is remembered on this device.
+  // The choice is remembered on this device. The admin's answer peek reuses it (hidden + ontoggle).
   import { game, toggleHideWord } from '../lib/game.svelte.js';
 
-  let { light = false } = $props(); // on the dark word-picking overlay
+  let { light = false, hidden, ontoggle } = $props(); // light: on the dark word-picking overlay
+  const isHidden = $derived(hidden ?? game.hideWord);
 </script>
 
 <button
   type="button"
   class="hide-word"
   class:light
-  aria-pressed={game.hideWord}
-  title={game.hideWord ? 'Show the word on my screen' : 'Hide the word from people next to me'}
-  onclick={toggleHideWord}
+  aria-pressed={isHidden}
+  title={isHidden ? 'Show the word on my screen' : 'Hide the word from people next to me'}
+  onclick={ontoggle ?? toggleHideWord}
 >
-  {game.hideWord ? '👁 Show' : '🙈 Hide'}
+  {isHidden ? '👁 Show' : '🙈 Hide'}
 </button>
 
 <style>
