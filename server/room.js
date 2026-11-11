@@ -4,7 +4,7 @@ import {
   REACTIONS, SWAP_COST, TEAMS, TURN_END_TIME, gameInfo, isGuessChar, isTeams, sanitizeSettings,
 } from '../shared/constants.js';
 import { CARDS_PER_GAME, EXTRA_TIME_SECONDS, POWERUPS, SPLAT_MS } from '../shared/powerups.js';
-import { getInventory, isAdmin, recordGame, refundCard, useCard } from './accounts.js';
+import { getInventory, isAdmin, isReservedName, recordGame, refundCard, useCard } from './accounts.js';
 import { isClose, isCorrect, normalize } from './guess.js';
 import { categoryLabel, pickWords, poolSize } from './words.js';
 import { ImposterGame } from './imposter.js';
@@ -121,6 +121,7 @@ export class Room {
       }
     } else {
       if (this.players.size >= MAX_PLAYERS) return { error: `This room is full (${MAX_PLAYERS} players max).` };
+      if (isReservedName(name) && !isAdmin(user)) return { error: 'That name is taken — pick another one!' };
       let base = cleanName(name);
       let finalName = base;
       const names = new Set([...this.players.values()].map((x) => x.name.toLowerCase()));

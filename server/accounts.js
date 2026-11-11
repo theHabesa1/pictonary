@@ -41,6 +41,9 @@ const DUMMY_HASH =
 // 👑 The game's admin: only this account can secretly peek at the answer.
 const ADMIN = 'yared';
 export const isAdmin = (user) => user?.username.toLowerCase() === ADMIN;
+// Nobody else may go by the admin's name, in any spelling ("yared", "Yaréd", "@yared", "Yared 2").
+export const isReservedName = (name) =>
+  String(name ?? '').toLowerCase().normalize('NFD').replace(/[^a-z]/g, '') === ADMIN;
 
 export function publicUser(row) {
   return {
@@ -70,6 +73,8 @@ export async function register({ username, password, displayName, avatar } = {})
   username = String(username ?? '').trim();
   password = String(password ?? '');
   if (!USERNAME_RE.test(username)) throw new AccountError('Username must be 3–20 letters, numbers or _');
+  if (isReservedName(username)) throw new AccountError('That username is taken — try another one!', 409);
+  if (isReservedName(displayName)) throw new AccountError('That name is taken — try another one!', 409);
   if (password.length < 6 || password.length > 100) throw new AccountError('Password must be at least 6 characters');
   const hash = await hashPassword(password);
   try {
@@ -113,6 +118,9 @@ export async function getUser(id) {
 }
 
 export async function updateProfile(userId, { displayName, avatar } = {}) {
+  if (isReservedName(displayName) && !isAdmin(await getUser(userId))) {
+    throw new AccountError('That name is taken — try another one!', 409);
+  }
   const { rows } = await query(
     `UPDATE users SET display_name = COALESCE($2, display_name), avatar = COALESCE($3, avatar)
      WHERE id = $1 RETURNING *`,
